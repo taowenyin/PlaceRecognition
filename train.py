@@ -4,7 +4,11 @@ import torch
 import random
 import numpy as np
 
-from os.path import join
+from os.path import join, isfile
+from models.models_generic import get_backbone, get_model, get_clusters
+from shutil import copyfile
+from dataset.mapillary_sls.MSLS import MSLS
+from tools import ROOT_DIR
 
 
 if __name__ == '__main__':
@@ -12,8 +16,10 @@ if __name__ == '__main__':
 
     parser.add_argument('--dataset_root_dir', type=str, default='/mnt/Dataset/Mapillary_Street_Level_Sequences',
                         help='数据集的根目录。')
-    parser.add_argument('--config_path', type=str, default='./configs', help='模型训练的配置文件的目录。')
+    parser.add_argument('--config_path', type=str, default=join(ROOT_DIR, 'configs'), help='模型训练的配置文件的目录。')
     parser.add_argument('--no_cuda', action='store_true', help='如果使用该参数表示只使用CPU，否则使用GPU。')
+    parser.add_argument('--resume_file', type=str, help='checkpoint文件的保存路径，用于从checkpoint载入训练参数，再次恢复训练。')
+    parser.add_argument('--cluster_file', type=str, help='聚类数据的保存路径，恢复训练。')
 
     opt = parser.parse_args()
 
@@ -30,10 +36,58 @@ if __name__ == '__main__':
     device = torch.device("cuda" if cuda else "cpu")
 
     # 固定随机种子
-    random.seed(int(config['train']['seed']))
-    np.random.seed(int(config['train']['seed']))
-    torch.manual_seed(int(config['train']['seed']))
+    random.seed(config['train'].getint('seed'))
+    np.random.seed(config['train'].getint('seed'))
+    torch.manual_seed(config['train'].getint('seed'))
     if cuda:
-        torch.cuda.manual_seed(int(config['train']['seed']))
+        torch.cuda.manual_seed(config['train'].getint('seed'))
+
+    print('===> 构建网络模型')
+
+    print('===> 构建基础BackBone模型')
+    encoding_model, encoding_dim = get_backbone()
+
+    if opt.resume_file:
+        opt.resume_file = join(join(ROOT_DIR, 'desired/checkpoint'), opt.resume_file)
+
+        if isfile(opt.resume_file):
+            print('===> 载入checkpoint "{}"中...'.format(opt.resume_file))
+            print('===> 载入checkpoint "{}"完毕'.format(opt.resume_file))
+        else:
+            raise FileNotFoundError("=> 在'{}'中没有找到checkpoint文件".format(opt.resume_file))
+    else:
+        print('===> 载入模型')
+
+        model = get_model(encoding_model, encoding_dim,
+                          append_pca_layer=config['train'].getboolean('wpca'))
+
+        # 保存的图像特征
+        init_cache = join(join(ROOT_DIR, 'desired/centroids'),
+                          'vgg16_' + 'mapillary_' + str(config['train'].getint('num_clusters')) + '_desc_cen.hdf5')
+
+        if opt.cluster_file:
+            opt.resume_file = join(join(ROOT_DIR, 'desired/centroids'), opt.resume_file)
+
+            if isfile(opt.cluster_file):
+                if opt.cluster_file != init_cache:
+                    copyfile(opt.cluster_file, init_cache)
+                else:
+                    raise FileNotFoundError("=> 在'{}'中没有找到聚类数据".format(opt.cluster_file))
+        else:
+            print('===> 寻找聚类中心点')
+
+            print('===> 载入聚类数据集')
+            train_dataset = MSLS(opt.dataset_root_dir, mode='test', cities_list='trondheim',
+                                 batch_size=config['train'].getint('batch_size'))
+
+            model = model.to(device)
+
+            print('===> 计算图像特征和聚类')
+            get_clusters(train_dataset, model, encoding_dim, device, config)
+
+            pass
+
+
+
 
     pass

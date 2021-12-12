@@ -23,6 +23,27 @@ default_cities = {
 }
 
 
+class ImagesFromList(Dataset):
+    def __init__(self, images, transform):
+        self.images = np.asarray(images)
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.images)
+
+    def __getitem__(self, idx):
+        try:
+            img = [Image.open(im) for im in self.images[idx].split(",")]
+        except:
+            img = [Image.open(self.images[0])]
+        img = [self.transform(im) for im in img]
+
+        if len(img) == 1:
+            img = img[0]
+
+        return img, idx
+
+
 class MSLS(Dataset):
     def __init__(self, root_dir, mode='train', cities_list=None, img_resize=(480, 640), negative_size=5,
                  positive_distance_threshold=10, negative_distance_threshold=25, cached_queries=1000,
@@ -51,7 +72,9 @@ class MSLS(Dataset):
         """
         super().__init__()
 
-        if cities_list is None:
+        if cities_list in default_cities:
+            self.__cities_list = default_cities[cities_list]
+        elif cities_list == '':
             self.__cities_list = default_cities[mode]
         else:
             self.__cities_list = cities_list.split(',')
@@ -86,7 +109,7 @@ class MSLS(Dataset):
         self.__current_subset = 0
 
         # 得到图像转换对象
-        self.__img_transform = self.__input_transform(img_resize)
+        self.__img_transform = MSLS.input_transform(img_resize)
 
         # 把所有数据分为若干批，每批数据的集合
         self.__cached_subset_idx = []
@@ -244,6 +267,13 @@ class MSLS(Dataset):
                     else:
                         non_positive_q_seq_keys_count += 1
 
+                print('\n=====> {}训练数据中，有正例的[{}/{}]个，无正例的[{}/{}]个'.format(
+                    city,
+                    has_positive_q_seq_keys_count,
+                    q_seq_keys_count,
+                    non_positive_q_seq_keys_count,
+                    q_seq_keys_count))
+
             # 读取测试集数据集，GPS/UTM/Pano都不可用
             elif self.__mode in ['test']:
                 # 载入对应子任务的图像索引
@@ -269,13 +299,6 @@ class MSLS(Dataset):
 
                 # 添加Query索引
                 self.__q_seq_idx.extend(list(range(_lenQ, len(q_seq_keys) + _lenQ)))
-
-            print('\n=====> {}数据，有正例的[{}/{}]个，无正例的[{}/{}]个'.format(
-                city,
-                has_positive_q_seq_keys_count,
-                q_seq_keys_count,
-                non_positive_q_seq_keys_count,
-                q_seq_keys_count))
 
         # 如果选择了城市、任务和子任务的组合，其中没有Query和Database图像，则退出。
         if len(self.__q_images_key) == 0 or len(self.__db_images_key) == 0:
@@ -318,93 +341,6 @@ class MSLS(Dataset):
 
     def __len__(self):
         return len(self.__triplets_data)
-
-    def __input_transform(self, resize):
-        """
-        对图像进行转换
-
-        :param resize: 转换后的图像大小
-        :return: 返回转换对象
-        """
-
-        if resize[0] > 0 and resize[1] > 0:
-            return transforms.Compose([
-                transforms.Resize(resize),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225]),
-            ])
-        else:
-            return transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225]),
-            ])
-
-    def new_epoch(self):
-        """
-        每一个EPOCH都需要运行改程序，主要作用是把数据分为若干批，每一批再通过循环输出模型
-        """
-
-        # 通过向上取整后，计算一共有多少批Query数据
-        self.cached_subset_size = math.ceil(len(self.__q_seq_idx) / self.__cached_queries)
-
-        ##################### 在验证机或测试集上使用
-        # 构建所有数据集的索引数组
-        q_seq_idx_array = np.arange(len(self.__q_seq_idx))
-
-        # 使用采样方式对Query数据集进行采样
-        q_seq_idx_array = random.choices(q_seq_idx_array, self.__weights, k=len(q_seq_idx_array))
-
-        # 把随机采样的Query数据集分为cached_subset_size份
-        self.__cached_subset_idx = np.array_split(q_seq_idx_array, self.cached_subset_size)
-        #######################
-
-        # 重置子集的计数
-        self.__current_subset = 0
-
-    def refresh_data(self, model=None, output_dim=None):
-        """
-        刷新数据，原因是每个EPOCH都不是取全部数据，而是一部分数据，即cached_queries多的数据，所以要刷新数据，来获取新数据
-
-        :param model: 如果网络已经存在，那么使用该网络对图像进行特征提取，用于验证集或测试集
-        :param output_dim: 网络输出的维度
-        """
-        # 清空数据
-        self.__triplets_data.clear()
-
-        if model is None:
-            # 随机从q_seq_idx中采样cached_queries长度的数据索引
-            q_choice_idxs = np.random.choice(len(self.__q_seq_idx), self.__cached_queries, replace=False)
-
-            for q_choice_idx in q_choice_idxs:
-                # 读取随机采样的Query索引
-                q_idx = self.__q_seq_idx[q_choice_idx]
-                # 读取随机采样的Query的正例索引，并随机从Query的正例中选取1个正例
-                p_idx = np.random.choice(self.__p_seq_idx[q_choice_idx], size=1)[0]
-
-                while True:
-                    # 从数据库中随机读取negative_num个反例
-                    n_idxs = np.random.choice(len(self.__db_images_key), self.__negative_num)
-
-                    # Query的negative_distance_threshold距离外才被认为是负例，而negative_distance_threshold内认为是正例或非负例，
-                    # 下面的判断是为了保证选择负例不在negative_distance_threshold范围内
-                    if sum(np.in1d(n_idxs, self.__non_negative_indices[q_choice_idx])) == 0:
-                        break
-
-                # 创建三元数据和对应的标签
-                triplet = [q_idx, p_idx, *n_idxs]
-                target = [-1, 1] + [0] * len(n_idxs)
-
-                self.__triplets_data.append((triplet, target))
-
-            # 子数据集调用次数+1
-            self.__current_subset += 1
-
-            return
-
-        # todo 如果model存在，那么就需要下面对图像进行特征提取
-        pass
 
     def __calc_sampling_weights(self):
         """
@@ -527,6 +463,29 @@ class MSLS(Dataset):
         return keys, np.asarray(idxs)
 
     @staticmethod
+    def input_transform(resize):
+        """
+        对图像进行转换
+
+        :param resize: 转换后的图像大小
+        :return: 返回转换对象
+        """
+
+        if resize[0] > 0 and resize[1] > 0:
+            return transforms.Compose([
+                transforms.Resize(resize),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225]),
+            ])
+        else:
+            return transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                                     std=[0.229, 0.224, 0.225]),
+            ])
+
+    @staticmethod
     def collate_fn(batch):
         """
         从三元数据列表中创建mini-batch
@@ -549,4 +508,73 @@ class MSLS(Dataset):
         indices = torch.from_numpy(np.asarray(indices))
 
         return query, positive, negatives, negative_counts, indices
+
+    @property
+    def db_images_key(self):
+        return self.__db_images_key
+
+    def new_epoch(self):
+        """
+        每一个EPOCH都需要运行改程序，主要作用是把数据分为若干批，每一批再通过循环输出模型
+        """
+
+        # 通过向上取整后，计算一共有多少批Query数据
+        self.cached_subset_size = math.ceil(len(self.__q_seq_idx) / self.__cached_queries)
+
+        ##################### 在验证机或测试集上使用
+        # 构建所有数据集的索引数组
+        q_seq_idx_array = np.arange(len(self.__q_seq_idx))
+
+        # 使用采样方式对Query数据集进行采样
+        q_seq_idx_array = random.choices(q_seq_idx_array, self.__weights, k=len(q_seq_idx_array))
+
+        # 把随机采样的Query数据集分为cached_subset_size份
+        self.__cached_subset_idx = np.array_split(q_seq_idx_array, self.cached_subset_size)
+        #######################
+
+        # 重置子集的计数
+        self.__current_subset = 0
+
+    def refresh_data(self, model=None, output_dim=None):
+        """
+        刷新数据，原因是每个EPOCH都不是取全部数据，而是一部分数据，即cached_queries多的数据，所以要刷新数据，来获取新数据
+
+        :param model: 如果网络已经存在，那么使用该网络对图像进行特征提取，用于验证集或测试集
+        :param output_dim: 网络输出的维度
+        """
+        # 清空数据
+        self.__triplets_data.clear()
+
+        if model is None:
+            # 随机从q_seq_idx中采样cached_queries长度的数据索引
+            q_choice_idxs = np.random.choice(len(self.__q_seq_idx), self.__cached_queries, replace=False)
+
+            for q_choice_idx in q_choice_idxs:
+                # 读取随机采样的Query索引
+                q_idx = self.__q_seq_idx[q_choice_idx]
+                # 读取随机采样的Query的正例索引，并随机从Query的正例中选取1个正例
+                p_idx = np.random.choice(self.__p_seq_idx[q_choice_idx], size=1)[0]
+
+                while True:
+                    # 从数据库中随机读取negative_num个反例
+                    n_idxs = np.random.choice(len(self.__db_images_key), self.__negative_num)
+
+                    # Query的negative_distance_threshold距离外才被认为是负例，而negative_distance_threshold内认为是正例或非负例，
+                    # 下面的判断是为了保证选择负例不在negative_distance_threshold范围内
+                    if sum(np.in1d(n_idxs, self.__non_negative_indices[q_choice_idx])) == 0:
+                        break
+
+                # 创建三元数据和对应的标签
+                triplet = [q_idx, p_idx, *n_idxs]
+                target = [-1, 1] + [0] * len(n_idxs)
+
+                self.__triplets_data.append((triplet, target))
+
+            # 子数据集调用次数+1
+            self.__current_subset += 1
+
+            return
+
+        # todo 如果model存在，那么就需要下面对图像进行特征提取
+        pass
 
