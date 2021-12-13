@@ -1,11 +1,13 @@
 import argparse
 import configparser
+
+import h5py
 import torch
 import random
 import numpy as np
 
 from os.path import join, isfile
-from models.models_generic import get_backbone, get_model, get_clusters
+from models.models_generic import get_backbone, get_model, create_image_clusters
 from shutil import copyfile
 from dataset.mapillary_sls.MSLS import MSLS
 from tools import ROOT_DIR
@@ -62,15 +64,15 @@ if __name__ == '__main__':
                           append_pca_layer=config['train'].getboolean('wpca'))
 
         # 保存的图像特征
-        init_cache = join(join(ROOT_DIR, 'desired/centroids'),
-                          'vgg16_' + 'mapillary_' + str(config['train'].getint('num_clusters')) + '_desc_cen.hdf5')
+        init_cache_file = join(join(ROOT_DIR, 'desired/centroids'),
+                               'vgg16_' + 'mapillary_' + str(config['train'].getint('num_clusters')) + '_desc_cen.hdf5')
 
         if opt.cluster_file:
             opt.resume_file = join(join(ROOT_DIR, 'desired/centroids'), opt.resume_file)
 
             if isfile(opt.cluster_file):
-                if opt.cluster_file != init_cache:
-                    copyfile(opt.cluster_file, init_cache)
+                if opt.cluster_file != init_cache_file:
+                    copyfile(opt.cluster_file, init_cache_file)
                 else:
                     raise FileNotFoundError("=> 在'{}'中没有找到聚类数据".format(opt.cluster_file))
         else:
@@ -82,10 +84,18 @@ if __name__ == '__main__':
 
             model = model.to(device)
 
-            print('===> 计算图像特征和聚类')
-            get_clusters(train_dataset, model, encoding_dim, device, config)
+            print('===> 计算图像特征并创建聚类文件')
+            create_image_clusters(train_dataset, model, encoding_dim, device, config, init_cache_file)
 
-            pass
+            # 把模型转为CPU模式，用于载入参数
+            model = model.to(device='cpu')
+
+        # 打开保存的聚类文件
+        with h5py.File(init_cache_file, mode='r') as h5:
+            # 获取图像聚类信息
+            image_clusters = h5.get('centroids')
+            # 获取图像特征信息
+            image_descriptors = h5.get('descriptors')
 
 
 

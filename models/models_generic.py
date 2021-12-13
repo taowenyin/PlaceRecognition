@@ -56,7 +56,16 @@ def get_model(encoding_model, encoding_dim, append_pca_layer=True):
     return nn_model
 
 
-def get_clusters(cluster_set, model, encoding_dim, device, config):
+def create_image_clusters(cluster_set, model, encoding_dim, device, config, save_file):
+    """
+
+    :param cluster_set: 用于计算聚类的数据集
+    :param model: 用于提取图像特征的模型
+    :param encoding_dim: 图像特征的维度
+    :param device: 使用的驱动
+    :param config: 配置信息
+    :param save_file: 图像特征和聚类的存储路径
+    """
     # 获取图像Resize大小
     resize = tuple(map(int, str.split(config['train'].get('resize'), ',')))
 
@@ -81,15 +90,11 @@ def get_clusters(cluster_set, model, encoding_dim, device, config):
     if not exists(join(ROOT_DIR, 'desired/centroids')):
         makedirs(join(ROOT_DIR, 'desired/centroids'))
 
-    # 定义保存的聚类文件名
-    init_cache_clusters = join(join(ROOT_DIR, 'desired/centroids'),
-                               'vgg16_' + 'mapillary_' + config['train'].get('num_clusters') + '_desc_cen.hdf5')
-
     # 如果文件存在就删除该文件
-    if exists(init_cache_clusters):
-        remove(init_cache_clusters)
+    if exists(save_file):
+        remove(save_file)
 
-    with h5py.File(init_cache_clusters, mode='w') as h5_file:
+    with h5py.File(save_file, mode='w') as h5_file:
         with torch.no_grad():
             model.eval()
             print('===> Extracting Descriptors')
