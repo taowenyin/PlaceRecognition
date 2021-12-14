@@ -60,7 +60,7 @@ if __name__ == '__main__':
     else:
         print('===> 载入模型')
 
-        model = get_model(encoding_model, encoding_dim,
+        model = get_model(encoding_model, encoding_dim, config,
                           append_pca_layer=config['train'].getboolean('wpca'))
 
         # 保存的图像特征
@@ -93,11 +93,14 @@ if __name__ == '__main__':
         # 打开保存的聚类文件
         with h5py.File(init_cache_file, mode='r') as h5:
             # 获取图像聚类信息
-            image_clusters = h5.get('centroids')
+            image_clusters = h5.get('centroids')[:]
             # 获取图像特征信息
-            image_descriptors = h5.get('descriptors')
+            image_descriptors = h5.get('descriptors')[:]
 
+            # 初始化模型参数
+            model.pool.init_params(image_clusters, image_descriptors)
 
+            del image_clusters, image_descriptors
 
 
     pass

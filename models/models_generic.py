@@ -13,6 +13,7 @@ from os import makedirs, remove
 from tools import ROOT_DIR
 from tqdm import tqdm
 from sklearn.cluster import KMeans
+from models.PatchNetVLAD import PatchNetVLAD
 
 
 def get_backbone():
@@ -41,17 +42,28 @@ def get_backbone():
     return encoding_model, encoding_dim
 
 
-def get_model(encoding_model, encoding_dim, append_pca_layer=True):
+def get_model(encoding_model, encoding_dim, config, append_pca_layer=True):
     """
     获取训练模型
 
     :param encoding_model: BackBone的模型
     :param encoding_dim: BackBone的模型输出维度
+    :param config: 训练配置信息
     :param append_pca_layer: 是否添加PCA层
     :return:
     """
     nn_model = nn.Module()
     nn_model.add_module('encoder', encoding_model)
+
+    if config['train'].get('pooling').lower() == 'patchnetvlad':
+        net_vlad = PatchNetVLAD(num_clusters=config['train'].getint('num_clusters'),
+                                encoding_dim=encoding_dim,
+                                patch_sizes=config['train'].get('patch_sizes'),
+                                strides=config['train'].get('strides'),
+                                vlad_v2=config['train'].getboolean('vlad_v2'))
+        nn_model.add_module('pool', net_vlad)
+    else:
+        raise ValueError('未知的Pooling类型: {}'.format(config['train'].get('pooling')))
 
     return nn_model
 

@@ -5,7 +5,6 @@ import numpy as np
 import sys
 import torchvision.transforms as transforms
 import torch.utils.data as data
-import itertools
 
 import torch
 from torch.utils.data import Dataset
