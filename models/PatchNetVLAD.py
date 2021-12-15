@@ -48,11 +48,12 @@ class PatchNetVLAD(nn.Module):
         if not self.__vlad_v2: # 不是VLAD V2的参数初始化
             # 执行L2范数，并对原始数据进行正则化操作
             clusters_assignment = clusters / np.linalg.norm(clusters, axis=1, keepdims=True)
-            # 求余弦距离
+            # 计算中心点特征和图像特征之间的余弦距离
             cos_dis = np.dot(clusters_assignment, descriptors.T)
             cos_dis.sort(0)
-            # 排序，降序
+            # 对余弦距离进行降序排列
             cos_dis = cos_dis[::-1, :]
+            #
             self.__alpha = (np.log(0.01) / np.mean(cos_dis[0, :] - cos_dis[1, :])).item()
             # 使用聚类后的中心点来初始化中心点参数
             self.__centroids = nn.Parameter(torch.from_numpy(clusters))
@@ -65,6 +66,8 @@ class PatchNetVLAD(nn.Module):
             knn = NearestNeighbors(n_jobs=-1)
             knn.fit(descriptors)
             del descriptors
+
+            # 通过KNN算法得到与中心点最近的2个图像的索引
             distance_square = np.square(knn.kneighbors(clusters, 2)[1])
             del knn
 
@@ -77,4 +80,6 @@ class PatchNetVLAD(nn.Module):
             self.__conv.weight = nn.Parameter((2.0 * self.__alpha * self.__centroids).unsqueeze(-1).unsqueeze(-1))
             self.__conv.bias = nn.Parameter(-1 * self.__alpha * self.__centroids.norm(dim=1))
 
+    def forward(self, x):
+        # todo 完成前向传播
         pass

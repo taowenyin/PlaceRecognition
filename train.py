@@ -5,6 +5,8 @@ import h5py
 import torch
 import random
 import numpy as np
+import torch.optim as optim
+import torch.nn as nn
 
 from os.path import join, isfile
 from models.models_generic import get_backbone, get_model, create_image_clusters
@@ -22,6 +24,7 @@ if __name__ == '__main__':
     parser.add_argument('--no_cuda', action='store_true', help='如果使用该参数表示只使用CPU，否则使用GPU。')
     parser.add_argument('--resume_file', type=str, help='checkpoint文件的保存路径，用于从checkpoint载入训练参数，再次恢复训练。')
     parser.add_argument('--cluster_file', type=str, help='聚类数据的保存路径，恢复训练。')
+    parser.add_argument('--start_epoch', default=0, type=int, metavar='N', help='手动设置迭代开始位置，用于重新开始的训练')
 
     opt = parser.parse_args()
 
@@ -54,6 +57,18 @@ if __name__ == '__main__':
 
         if isfile(opt.resume_file):
             print('===> 载入checkpoint "{}"中...'.format(opt.resume_file))
+            checkpoint = torch.load(opt.resume_file, map_location=lambda storage, loc: storage)
+            # 保存载入的聚类中心点的
+            config['train']['num_clusters'] = str(checkpoint['state_dict']['pool.centroids'].shape[0])
+
+            model = get_model(encoding_model, encoding_dim, config,
+                              append_pca_layer=config['train'].getboolean('wpca'))
+
+            # 载入模型参数
+            model.load_state_dict(checkpoint['state_dict'])
+            # 设置迭代开始位置
+            opt.start_epoch = checkpoint['epoch']
+
             print('===> 载入checkpoint "{}"完毕'.format(opt.resume_file))
         else:
             raise FileNotFoundError("=> 在'{}'中没有找到checkpoint文件".format(opt.resume_file))
@@ -104,6 +119,22 @@ if __name__ == '__main__':
             model.pool.init_params(image_clusters, image_descriptors)
 
             del image_clusters, image_descriptors
+
+    if config['train'].get('optim') == 'ADAM':
+        optimizer = optim.Adam(filter(lambda par: par.requires_grad, model.parameters()),
+                               lr=config['train'].getfloat('lr'))
+    else:
+        raise ValueError('未知的优化器: ' + config['train'].get('optim'))
+
+    # 使用三元损失函数，并使用欧氏距离作为距离函数
+    criterion = nn.TripletMarginLoss(margin=config['train'].getfloat('margin') ** 0.5,
+                                     p=2, reduction='sum').to(device)
+
+    model = model.to(device)
+
+    # 载入优化器的参数
+    if opt.resume_file:
+        optimizer.load_state_dict(checkpoint['optimizer'])
 
 
     pass
