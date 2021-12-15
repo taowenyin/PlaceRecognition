@@ -64,17 +64,20 @@ if __name__ == '__main__':
                           append_pca_layer=config['train'].getboolean('wpca'))
 
         # 保存的图像特征
-        init_cache_file = join(join(ROOT_DIR, 'desired/centroids'),
+        init_cache_file = join(join(ROOT_DIR, 'desired', 'centroids'),
                                'vgg16_' + 'mapillary_' + str(config['train'].getint('num_clusters')) + '_desc_cen.hdf5')
 
         if opt.cluster_file:
-            opt.resume_file = join(join(ROOT_DIR, 'desired/centroids'), opt.resume_file)
+            opt.cluster_file = join(join(ROOT_DIR, 'desired', 'centroids'), opt.cluster_file)
+
+            print('cluster_file = {}'.format(opt.cluster_file))
+            print('init_cache_file = {}'.format(init_cache_file))
 
             if isfile(opt.cluster_file):
                 if opt.cluster_file != init_cache_file:
                     copyfile(opt.cluster_file, init_cache_file)
-                else:
-                    raise FileNotFoundError("=> 在'{}'中没有找到聚类数据".format(opt.cluster_file))
+            else:
+                raise FileNotFoundError("=> 在'{}'中没有找到聚类数据".format(opt.cluster_file))
         else:
             print('===> 寻找聚类中心点')
 
