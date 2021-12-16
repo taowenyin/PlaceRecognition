@@ -73,7 +73,7 @@ class MSLS(Dataset):
 
         if cities_list in default_cities:
             self.__cities_list = default_cities[cities_list]
-        elif cities_list == '':
+        elif cities_list is None:
             self.__cities_list = default_cities[mode]
         else:
             self.__cities_list = cities_list.split(',')
@@ -99,7 +99,7 @@ class MSLS(Dataset):
         self.__mode = mode
         self.__sub_task = sub_task
         self.__exclude_panos = exclude_panos
-        self.__negative_num = negative_size
+        self.__negative_size = negative_size
         self.__positive_distance_threshold = positive_distance_threshold
         self.__negative_distance_threshold = negative_distance_threshold
         self.__cached_queries = cached_queries
@@ -309,9 +309,9 @@ class MSLS(Dataset):
 
         self.__q_seq_idx = np.asarray(self.__q_seq_idx)
         self.__q_images_key = np.asarray(self.__q_images_key)
+        self.__db_images_key = np.asarray(self.__db_images_key)
         self.__p_seq_idx = np.asarray(self.__p_seq_idx, dtype=object)
         self.__non_negative_indices = np.asarray(self.__non_negative_indices, dtype=object)
-        self.__db_images_key= np.asarray(self.__db_images_key)
         self.__sideways = np.asarray(self.__sideways)
         self.__night = np.asarray(self.__night)
 
@@ -512,6 +512,10 @@ class MSLS(Dataset):
     def db_images_key(self):
         return self.__db_images_key
 
+    @property
+    def q_seq_idx(self):
+        return self.__q_seq_idx
+
     def new_epoch(self):
         """
         每一个EPOCH都需要运行改程序，主要作用是把数据分为若干批，每一批再通过循环输出模型
@@ -556,7 +560,7 @@ class MSLS(Dataset):
 
                 while True:
                     # 从数据库中随机读取negative_num个反例
-                    n_idxs = np.random.choice(len(self.__db_images_key), self.__negative_num)
+                    n_idxs = np.random.choice(len(self.__db_images_key), self.__negative_size)
 
                     # Query的negative_distance_threshold距离外才被认为是负例，而negative_distance_threshold内认为是正例或非负例，
                     # 下面的判断是为了保证选择负例不在negative_distance_threshold范围内

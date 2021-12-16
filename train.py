@@ -136,5 +136,25 @@ if __name__ == '__main__':
     if opt.resume_file:
         optimizer.load_state_dict(checkpoint['optimizer'])
 
+    print('===> 载入训练和验证数据集')
+
+    train_dataset = MSLS(opt.dataset_root_dir,
+                         mode='train',
+                         img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
+                         negative_size=config['train'].getint('negative_size'),
+                         batch_size=config['train'].getint('batch_size'),
+                         exclude_panos=config['train'].getboolean('exclude_panos'))
+
+    validation_dataset = MSLS(opt.dataset_root_dir,
+                              mode='val',
+                              img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
+                              positive_distance_threshold=config['train'].getint('positive_distance_threshold'),
+                              batch_size=config['train'].getint('batch_size'),
+                              exclude_panos=config['train'].getboolean('exclude_panos'))
+
+    print('===> 训练集中Query的数量为: {}'.format(train_dataset.q_seq_idx))
+    print('===> 验证集中Query的数量为: {}'.format(validation_dataset.q_seq_idx))
+
+    print('===> 开始训练...')
 
     pass
