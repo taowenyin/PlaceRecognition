@@ -97,7 +97,7 @@ if __name__ == '__main__':
             print('===> 寻找聚类中心点')
 
             print('===> 载入聚类数据集')
-            train_dataset = MSLS(opt.dataset_root_dir, mode='test', cities_list='trondheim',
+            train_dataset = MSLS(opt.dataset_root_dir, mode='test', cities_list='train',
                                  batch_size=config['train'].getint('batch_size'))
 
             model = model.to(device)
@@ -152,8 +152,8 @@ if __name__ == '__main__':
                               batch_size=config['train'].getint('batch_size'),
                               exclude_panos=config['train'].getboolean('exclude_panos'))
 
-    print('===> 训练集中Query的数量为: {}'.format(train_dataset.q_seq_idx))
-    print('===> 验证集中Query的数量为: {}'.format(validation_dataset.q_seq_idx))
+    print('===> 训练集中Query的数量为: {}'.format(len(train_dataset.q_seq_idx)))
+    print('===> 验证集中Query的数量为: {}'.format(len(validation_dataset.q_seq_idx)))
 
     print('===> 开始训练...')
 
