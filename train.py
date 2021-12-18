@@ -97,8 +97,12 @@ if __name__ == '__main__':
             print('===> 寻找聚类中心点')
 
             print('===> 载入聚类数据集')
-            train_dataset = MSLS(opt.dataset_root_dir, mode='test', cities_list='train',
+            train_dataset = MSLS(opt.dataset_root_dir,
+                                 mode='test', cities_list='train',
+                                 img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                                  batch_size=config['train'].getint('batch_size'))
+
+            print('===> 聚类数据集中的数据数量为: {}'.format(len(train_dataset.db_images_key)))
 
             model = model.to(device)
 
