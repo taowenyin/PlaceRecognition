@@ -116,7 +116,7 @@ class MSLS(Dataset):
         # 所有Query对应的正例索引
         self.all_positive_indices = []
         # 每批cached_queries个数据，提供有多少批数据
-        self.cached_subset_size = 0
+        self.__cached_subset_size = 0
 
         # 根据任务类型得到序列长度
         if task == 'im2im': # 图像到图像
@@ -516,13 +516,17 @@ class MSLS(Dataset):
     def q_seq_idx(self):
         return self.__q_seq_idx
 
+    @property
+    def cached_subset_size(self):
+        return self.__cached_subset_size
+
     def new_epoch(self):
         """
         每一个EPOCH都需要运行改程序，主要作用是把数据分为若干批，每一批再通过循环输出模型
         """
 
         # 通过向上取整后，计算一共有多少批Query数据
-        self.cached_subset_size = math.ceil(len(self.__q_seq_idx) / self.__cached_queries)
+        self.__cached_subset_size = math.ceil(len(self.__q_seq_idx) / self.__cached_queries)
 
         ##################### 在验证机或测试集上使用
         # 构建所有数据集的索引数组
@@ -532,7 +536,7 @@ class MSLS(Dataset):
         q_seq_idx_array = random.choices(q_seq_idx_array, self.__weights, k=len(q_seq_idx_array))
 
         # 把随机采样的Query数据集分为cached_subset_size份
-        self.__cached_subset_idx = np.array_split(q_seq_idx_array, self.cached_subset_size)
+        self.__cached_subset_idx = np.array_split(q_seq_idx_array, self.__cached_subset_size)
         #######################
 
         # 重置子集的计数

@@ -17,8 +17,9 @@ from tools import ROOT_DIR
 from tqdm import trange
 from time import sleep
 from training.train_epoch import train_epoch
-from validation.validation import validation
+from model_validation.validation import validation
 from training.tools import save_checkpoint
+from datetime import datetime
 
 
 if __name__ == '__main__':
@@ -57,7 +58,7 @@ if __name__ == '__main__':
     print('===> 构建网络模型')
 
     print('===> 构建基础BackBone模型')
-    encoding_model, encoding_dim = get_backbone()
+    encoding_model, encoding_dim = get_backbone(config)
 
     if opt.resume_file:
         opt.resume_file = join(join(ROOT_DIR, 'desired/checkpoint'), opt.resume_file)
@@ -87,7 +88,9 @@ if __name__ == '__main__':
 
         # 保存的图像特征
         init_cache_file = join(join(ROOT_DIR, 'desired', 'centroids'),
-                               'vgg16_' + 'mapillary_' + str(config['train'].getint('num_clusters')) + '_desc_cen.hdf5')
+                               config['model'].get('backbone') + '_' +
+                               config['dataset'].get('name') + '_' +
+                               str(config['train'].getint('num_clusters')) + '_desc_cen.hdf5')
 
         if opt.cluster_file:
             opt.cluster_file = join(join(ROOT_DIR, 'desired', 'centroids'), opt.cluster_file)
@@ -174,7 +177,16 @@ if __name__ == '__main__':
     opt.resume_dir = join(ROOT_DIR, 'desired/checkpoint')
     # 如果目录不存在就创建目录
     if not exists(opt.resume_dir):
-        makedirs(join(ROOT_DIR, 'desired/centroids'))
+        makedirs(opt.resume_dir)
+
+    # 保存可视化结果的路径
+    opt.result_dir = join(ROOT_DIR, 'result',
+                          config['model'].get('backbone'),
+                          config['dataset'].get('name'),
+                          config['train'].get('num_clusters'),
+                          datetime.now().strftime('%Y_%m_%d_%H-%M-%S'))
+    if not exists(opt.result_dir):
+        makedirs(opt.result_dir)
 
     # 保存训练结果没有改善的次数
     not_improved = 0
@@ -188,7 +200,7 @@ if __name__ == '__main__':
     # 开始训练，从opt.start_epoch + 1次开始，到opt.epochs_count次结束
     train_epoch_bar = trange(opt.start_epoch + 1, opt.epochs_count + 1)
     for epoch in train_epoch_bar:
-        train_epoch_bar.set_description('第{}次训练周期'.format(epoch))
+        train_epoch_bar.set_description('第{}/{}次训练周期'.format(epoch, opt.epochs_count + 1 - opt.start_epoch + 1))
 
         # 执行一个训练周期
         train_epoch(train_dataset, model, optimizer, criterion, encoding_dim, device, opt, config)
@@ -219,12 +231,12 @@ if __name__ == '__main__':
             if config['train'].getint('patience') > 0 and \
                     not_improved > (config['train'].getint('patience') / config['train'].getint('eval_every')):
                 print('经过{}个训练周期，模型的性能已经不能再改进，停止训练...'.format(config['train'].getint('patience')))
+                break
 
-                pass
+    # 显示最好的结果
+    print('===> 最好的结果 Recalls@5: {:.4f}'.format(best_score), flush=True)
 
-            pass
+    # 清空CUDA缓存
+    torch.cuda.empty_cache()
 
-
-        sleep(1)
-
-    pass
+    print('训练结束...')

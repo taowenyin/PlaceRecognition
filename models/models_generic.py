@@ -16,18 +16,26 @@ from sklearn.cluster import KMeans
 from models.PatchNetVLAD import PatchNetVLAD
 
 
-def get_backbone():
+def get_backbone(config):
     """
     获取BackBone的模型
 
+    :type config: 配置文件对象
     :return:
     encoding_model: BackBone的模型
     encoding_dim: BackBone的模型输出维度
     """
-    # 模型的输出维度
-    encoding_dim = 512
-    # 图像编码模型为VGG-16，并且采用ImageNet的预训练参数
-    encoding_model = vgg16(pretrained=True)
+
+    if config['model'].get('backbone') == 'vgg16':
+        # 模型的输出维度
+        encoding_dim = 512
+        # 图像编码模型为VGG-16，并且采用ImageNet的预训练参数
+        encoding_model = vgg16(pretrained=True)
+    else:
+        # 模型的输出维度
+        encoding_dim = 512
+        # 图像编码模型为VGG-16，并且采用ImageNet的预训练参数
+        encoding_model = vgg16(pretrained=True)
 
     # 获取所有的网络层
     layers = list(encoding_model.children())[:-2]
