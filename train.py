@@ -8,11 +8,17 @@ import numpy as np
 import torch.optim as optim
 import torch.nn as nn
 
-from os.path import join, isfile
+from os.path import join, isfile, exists
+from os import makedirs
 from models.models_generic import get_backbone, get_model, create_image_clusters
 from shutil import copyfile
 from dataset.mapillary_sls.MSLS import MSLS
 from tools import ROOT_DIR
+from tqdm import trange
+from time import sleep
+from training.train_epoch import train_epoch
+from validation.validation import validation
+from training.tools import save_checkpoint
 
 
 if __name__ == '__main__':
@@ -25,6 +31,7 @@ if __name__ == '__main__':
     parser.add_argument('--resume_file', type=str, help='checkpoint文件的保存路径，用于从checkpoint载入训练参数，再次恢复训练。')
     parser.add_argument('--cluster_file', type=str, help='聚类数据的保存路径，恢复训练。')
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N', help='手动设置迭代开始位置，用于重新开始的训练')
+    parser.add_argument('--epochs_count', default=30, type=int, help='模型训练的周期数')
 
     opt = parser.parse_args()
 
@@ -144,6 +151,7 @@ if __name__ == '__main__':
 
     train_dataset = MSLS(opt.dataset_root_dir,
                          mode='train',
+                         cities_list='trondheim',
                          img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                          negative_size=config['train'].getint('negative_size'),
                          batch_size=config['train'].getint('batch_size'),
@@ -151,6 +159,7 @@ if __name__ == '__main__':
 
     validation_dataset = MSLS(opt.dataset_root_dir,
                               mode='val',
+                              cities_list='cph',
                               img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                               positive_distance_threshold=config['train'].getint('positive_distance_threshold'),
                               batch_size=config['train'].getint('batch_size'),
@@ -160,5 +169,62 @@ if __name__ == '__main__':
     print('===> 验证集中Query的数量为: {}'.format(len(validation_dataset.q_seq_idx)))
 
     print('===> 开始训练...')
+
+    # 保存训练参数的路径
+    opt.resume_dir = join(ROOT_DIR, 'desired/checkpoint')
+    # 如果目录不存在就创建目录
+    if not exists(opt.resume_dir):
+        makedirs(join(ROOT_DIR, 'desired/centroids'))
+
+    # 保存训练结果没有改善的次数
+    not_improved = 0
+    # 最好结果的分数
+    best_score = 0
+    # 如果有保存的参数，那么从参数中读取not_improved和best_score
+    if opt.resume_file:
+        not_improved = checkpoint['not_improved']
+        best_score = checkpoint['best_score']
+
+    # 开始训练，从opt.start_epoch + 1次开始，到opt.epochs_count次结束
+    train_epoch_bar = trange(opt.start_epoch + 1, opt.epochs_count + 1)
+    for epoch in train_epoch_bar:
+        train_epoch_bar.set_description('第{}次训练周期'.format(epoch))
+
+        # 执行一个训练周期
+        train_epoch(train_dataset, model, optimizer, criterion, encoding_dim, device, opt, config)
+
+        # 每训练eval_every次，进行一次验证
+        if(epoch % config['train'].getint('eval_every')) == 0:
+            recalls = validation(validation_dataset, model, encoding_dim, device, opt, config, epoch)
+
+            # 如果在验证集上结果大于保存的结果，那么就把not_improved清零，并且保存当前最好结果，否not_improved加1
+            is_best = recalls[5] > best_score
+            if is_best:
+                not_improved = 0
+                best_score = recalls[5]
+            else:
+                not_improved += 1
+
+            # 保存模型参数
+            save_checkpoint({
+                'epoch': epoch,
+                'state_dict': model.state_dict(),
+                'recalls': recalls,
+                'best_score': best_score,
+                'not_improved': not_improved,
+                'optimizer': optimizer.state_dict(),
+            }, opt, is_best)
+
+            # 假如patience大于0，且not_improved大于分配到每个验证周期的patience次数，那么就认为模型已经无法再改进了
+            if config['train'].getint('patience') > 0 and \
+                    not_improved > (config['train'].getint('patience') / config['train'].getint('eval_every')):
+                print('经过{}个训练周期，模型的性能已经不能再改进，停止训练...'.format(config['train'].getint('patience')))
+
+                pass
+
+            pass
+
+
+        sleep(1)
 
     pass
