@@ -1,3 +1,5 @@
+import torch
+
 from dataset.mapillary_sls.MSLS import MSLS
 from configparser import ConfigParser
 from tqdm import trange
@@ -55,6 +57,31 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
         training_data_bar = tqdm(training_data_loader, leave=False)
         for iteration, (query, positives, negatives, neg_counts, indices) in enumerate(training_data_bar, start_iter):
             training_data_bar.set_description('第{}批的第{}组训练数据'.format(sub_cached_q_iter, iteration))
+
+            if query is None:
+                continue
+
+            # 获取Query的B、C、H、W
+            B, C, H, W = query.shape
+            # 计算所有Query对应的反例数量和
+            neg_size = torch.sum(neg_counts)
+            # 把Query、Positives和Negatives进行拼接，合并成一个Tensor
+            data_input = torch.cat([query, positives, negatives])
+            # 把数据放到GPU中
+            data_input = data_input.to(device)
+
+            # 对数据使用BackBone提取图像特征
+            data_encoding = model.encoder(data_input)
+            # 经过池化后的数据
+            pooling_data = model.pool(data_encoding)
+
+            # 把Pooling的数据分为Query、正例和负例
+            pooling_Q, pooling_P, pooling_N = torch.split(pooling_data, [B, B, neg_size])
+
+            optimizer.zero_grad()
+
+            # todo 训练还未结束
+
             pass
 
     pass

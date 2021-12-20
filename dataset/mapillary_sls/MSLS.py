@@ -358,14 +358,14 @@ class MSLS(Dataset):
             self.__weights[self.__sideways] += N / len(self.__sideways)
 
         # 打印权重信息
-        tqdm.write("#侧面 [{}/{}]; #夜间; [{}/{}]".format(len(self.__sideways), N, len(self.__night), N))
-        tqdm.write("正面和白天的权重为{:.4f}".format(1))
+        print("#侧面 [{}/{}]; #夜间; [{}/{}]".format(len(self.__sideways), N, len(self.__night), N))
+        print("正面和白天的权重为{:.4f}".format(1))
         if len(self.__night) != 0:
-            tqdm.write("正面且夜间的权重为{:.4f}".format(1 + N / len(self.__night)))
+            print("正面且夜间的权重为{:.4f}".format(1 + N / len(self.__night)))
         if len(self.__sideways) != 0:
-            tqdm.write("侧面且白天的权重为{:.4f}".format(1 + N / len(self.__sideways)))
+            print("侧面且白天的权重为{:.4f}".format(1 + N / len(self.__sideways)))
         if len(self.__sideways) != 0 and len(self.__night) != 0:
-            tqdm.write("侧面且夜间的权重为{:.4f}".format(1 + N / len(self.__night) + N / len(self.__sideways)))
+            print("侧面且夜间的权重为{:.4f}".format(1 + N / len(self.__night) + N / len(self.__sideways)))
 
     def __seq_idx_2_frame_idx(self, q_seq_key, q_seq_keys):
         """

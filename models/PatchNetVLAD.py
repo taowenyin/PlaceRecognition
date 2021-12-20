@@ -81,5 +81,58 @@ class PatchNetVLAD(nn.Module):
             self.__conv.bias = nn.Parameter(-1 * self.__alpha * self.__centroids.norm(dim=1))
 
     def forward(self, x):
-        # todo 完成前向传播
-        pass
+        B, C, H, W = x.shape
+
+        # ========NetVLAD的soft-assignment部分==========
+        # 经过一个1x1的卷积，从（B, C, H, W）->(B, K, H, W)
+        soft_assign = self.__conv(x)
+        # 经过Softmax得到soft-assignment
+        soft_assign = F.softmax(soft_assign, dim=1)
+        # =============================================
+
+        # 创建用于保存每个聚类残差值的Tensor
+        store_residual = torch.zeros([B, self.__num_clusters, C, H, W],
+                                     dtype=x.dtype, layout=x.layout, device=x.device)
+
+        # 循环计算X与每个重点之间的残差，并保存在store_residual中
+        for i in range(self.__num_clusters):
+            # =====================================NetVLAD的sVLAD core部分====================================
+            # 把 (B, C, H, W)的X变为(B, 1, C, H, W)，用于与后续的num_clusters个聚类中心点进行残差计算，其中的1表示就是就是聚类个数
+            input_x = x.unsqueeze(0).permute(1, 0, 2, 3, 4)
+            # 取出每个聚类中心，形状为(1, encoding_dim)，把该中心点的形状变为(1, encoding_dim, H, W)，
+            # 再变为(1, 1, encoding_dim, H, W)，与X的形状保持一致
+            centroids = self.__centroids[0:1, :].expand(x.size(2), x.size(3), -1, -1).permute(2, 3, 0, 1).unsqueeze(0)
+
+            # 计算X与每个中心点的残差
+            residual = input_x - centroids
+            # ===============================================================================================
+
+            # soft-assignment作为α与残差相乘，并且把形状为(B, 1, H, W)的soft_assign变为(B, 1, 1, H, W)，
+            # 第1个表示聚类中的一个，第2个1是增加的维度
+            soft_assign_ = soft_assign[:, i:i + 1, :].unsqueeze(2)
+            residual *= soft_assign_
+
+            # 保存残差
+            store_residual[:, i:i + 1, :, :, :] = residual
+
+        return None
+
+
+if __name__ == '__main__':
+    if torch.cuda.is_available():
+        cuda = True
+    else:
+        cuda = False
+    device = torch.device("cuda" if cuda else "cpu")
+
+    data = torch.rand(2, 512, 120, 160).to(device)
+
+    image_clusters = np.random.rand(20, 512).astype(np.float32)
+    image_descriptors = np.random.rand(50000, 512).astype(np.float32)
+
+    model = PatchNetVLAD(20, 512)
+    model.init_params(image_clusters, image_descriptors)
+
+    model = model.to(device)
+
+    output = model(data)
