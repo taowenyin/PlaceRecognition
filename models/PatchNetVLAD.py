@@ -146,7 +146,7 @@ class PatchNetVLAD(nn.Module):
         :return: 积分图
         """
 
-        # 计算一个完整的积分图
+        # 使用一个1x1的Patch计算完整的积分图
         feature_out = torch.cumsum(feature_in, dim=-1)
         feature_out = torch.cumsum(feature_out, dim=-2)
         # todo 不知道是什么意思
@@ -172,12 +172,13 @@ class PatchNetVLAD(nn.Module):
 
         # [1 -1
         # -1 1]
-        # 设置卷积核
+        # 设置卷积核，通过设置4个点的符号来计算任意区域的积分图值
         conv_weight[:, :, 0, -1] = -1
         conv_weight[:, :, -1, 0] = -1
 
+        # 计算出不同Patch区域内的积分图
         feature_regions = torch.nn.functional.conv2d(integral_feature, conv_weight, stride=patch_stride, groups=C,
-                                                  dilation=patch_size)
+                                                     dilation=patch_size)
 
         # todo 为什么要除以平方不懂
         return feature_regions / (patch_size ** 2)
