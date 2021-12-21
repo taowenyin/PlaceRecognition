@@ -83,7 +83,7 @@ class PatchNetVLAD(nn.Module):
     def forward(self, x):
         B, C, H, W = x.shape
 
-        # ========NetVLAD的soft-assignment部分==========
+        # ======步骤一：NetVLAD的soft-assignment部分======
         # 经过一个1x1的卷积，从（B, C, H, W）->(B, K, H, W)
         soft_assign = self.__conv(x)
         # 经过Softmax得到soft-assignment
@@ -96,7 +96,7 @@ class PatchNetVLAD(nn.Module):
 
         # 循环计算X与每个重点之间的残差，并保存在store_residual中
         for i in range(self.__num_clusters):
-            # =====================================NetVLAD的sVLAD core部分====================================
+            # =================================步骤二：NetVLAD的VLAD core部分==================================
             # 把 (B, C, H, W)的X变为(B, 1, C, H, W)，用于与后续的num_clusters个聚类中心点进行残差计算，其中的1表示就是就是聚类个数
             input_x = x.unsqueeze(0).permute(1, 0, 2, 3, 4)
             # 取出每个聚类中心，形状为(1, encoding_dim)，把该中心点的形状变为(1, encoding_dim, H, W)，
@@ -107,6 +107,7 @@ class PatchNetVLAD(nn.Module):
             residual = input_x - centroids
             # ===============================================================================================
 
+            # =====================步骤三：VLAD core与soft-assignment相乘==========================
             # soft-assignment作为α与残差相乘，并且把形状为(B, 1, H, W)的soft_assign变为(B, 1, 1, H, W)，
             # 第1个表示聚类中的一个，第2个1是增加的维度
             soft_assign_ = soft_assign[:, i:i + 1, :].unsqueeze(2)
@@ -114,6 +115,16 @@ class PatchNetVLAD(nn.Module):
 
             # 保存残差
             store_residual[:, i:i + 1, :, :, :] = residual
+            # ==================================================================================
+
+        # =====================步骤四：计算全局的VLAD特征=======================
+        # 把残差的维度从(B, num_clusters, C, H, W) -> (B, num_clusters, C, HxW)
+        vlad_global = store_residual.view(B, self.__num_clusters, C, -1)
+        # 对所有残差求和，得到全局的VLAD特征
+        vlad_global = vlad_global.sum(dim=-1)
+        # ==================================================================
+
+        print('xxx')
 
         return None
 
