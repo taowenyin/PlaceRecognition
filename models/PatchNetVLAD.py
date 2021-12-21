@@ -124,9 +124,63 @@ class PatchNetVLAD(nn.Module):
         vlad_global = vlad_global.sum(dim=-1)
         # ==================================================================
 
+        # 修改残差的形状 (B, num_clusters, C, H, W) -> (B, num_clusters x C, H, W)
+        store_residual = store_residual.view(B, -1, H, W)
+
+        # 得到NetVLAD完整的积分图
+        i_vlad = self.__get_integral_feature(store_residual)
+        vlad_flattened = []
+        for patch_size, stride in zip(self.__patch_sizes, self.__strides):
+            vlad_flattened.append(self.__get_square_regions_from_integral(i_vlad, patch_size, stride))
+
         print('xxx')
 
         return None
+
+    def __get_integral_feature(self, feature_in):
+        """
+        返回特征图的积分图
+
+        :param feature_in: 输入特征(B, D, H, W)，其中D表示H x W特征的维度，即把H x W作为一个特征。
+        对于VLAD来说，D = num_clusters x C，num_clusters表示聚类的数量，C表示原来特征的维度。
+        :return: 积分图
+        """
+
+        # 计算一个完整的积分图
+        feature_out = torch.cumsum(feature_in, dim=-1)
+        feature_out = torch.cumsum(feature_out, dim=-2)
+        # todo 不知道是什么意思
+        feature_out = torch.nn.functional.pad(feature_out, (1, 0, 1, 0), "constant", 0)
+
+        return feature_out
+
+    def __get_square_regions_from_integral(self, integral_feature, patch_size, patch_stride):
+        """
+        根据不同Patch和Stride大小返回不同的积分图
+
+        :param integral_feature: 完整的积分图
+        :param patch_size: Patch大小
+        :param patch_stride: Stride大小
+        """
+
+        B, C, H, W = integral_feature.shape
+
+        if integral_feature.get_device() == -1:
+            conv_weight = torch.ones(C, 1, 2, 2)
+        else:
+            conv_weight = torch.ones(C, 1, 2, 2, device=integral_feature.get_device())
+
+        # [1 -1
+        # -1 1]
+        # 设置卷积核
+        conv_weight[:, :, 0, -1] = -1
+        conv_weight[:, :, -1, 0] = -1
+
+        feature_regions = torch.nn.functional.conv2d(integral_feature, conv_weight, stride=patch_stride, groups=C,
+                                                  dilation=patch_size)
+
+        # todo 为什么要除以平方不懂
+        return feature_regions / (patch_size ** 2)
 
 
 if __name__ == '__main__':
