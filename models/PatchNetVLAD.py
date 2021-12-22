@@ -141,8 +141,10 @@ class PatchNetVLAD(nn.Module):
             vlad = F.normalize(vlad, p=2, dim=1)
             vlad_local.append(vlad)
 
+        # intra-normalization
         vlad_global = F.normalize(vlad_global, p=2, dim=2)
         vlad_global = vlad_global.view(x.size(0), -1)
+        # L2 normalize
         vlad_global = F.normalize(vlad_global, p=2, dim=1)
 
         return vlad_local, vlad_global
@@ -213,3 +215,5 @@ if __name__ == '__main__':
     model = model.to(device)
 
     output = model(data)
+
+    print('xx')
