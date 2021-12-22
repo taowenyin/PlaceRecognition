@@ -133,9 +133,19 @@ class PatchNetVLAD(nn.Module):
         for patch_size, stride in zip(self.__patch_sizes, self.__strides):
             vlad_flattened.append(self.__get_square_regions_from_integral(i_vlad, patch_size, stride))
 
-        print('xxx')
+        vlad_local = []
+        for vlad in vlad_flattened:  # looped to avoid GPU memory issues with certain config combinations
+            vlad = vlad.view(B, self.__num_clusters, C, -1)
+            vlad = F.normalize(vlad, p=2, dim=2)
+            vlad = vlad.view(x.size(0), -1, vlad.size(3))
+            vlad = F.normalize(vlad, p=2, dim=1)
+            vlad_local.append(vlad)
 
-        return None
+        vlad_global = F.normalize(vlad_global, p=2, dim=2)
+        vlad_global = vlad_global.view(x.size(0), -1)
+        vlad_global = F.normalize(vlad_global, p=2, dim=1)
+
+        return vlad_local, vlad_global
 
     def __get_integral_feature(self, feature_in):
         """
@@ -150,6 +160,7 @@ class PatchNetVLAD(nn.Module):
         feature_out = torch.cumsum(feature_in, dim=-1)
         feature_out = torch.cumsum(feature_out, dim=-2)
         # todo 不知道是什么意思
+        # 在最后两个维度上增加一个Padding
         feature_out = torch.nn.functional.pad(feature_out, (1, 0, 1, 0), "constant", 0)
 
         return feature_out
@@ -191,12 +202,12 @@ if __name__ == '__main__':
         cuda = False
     device = torch.device("cuda" if cuda else "cpu")
 
-    data = torch.rand(2, 512, 120, 160).to(device)
+    data = torch.rand(2, 512, 60, 80).to(device)
 
     image_clusters = np.random.rand(20, 512).astype(np.float32)
     image_descriptors = np.random.rand(50000, 512).astype(np.float32)
 
-    model = PatchNetVLAD(20, 512)
+    model = PatchNetVLAD(20, 512, patch_sizes='2,5,8', strides='1,1,1')
     model.init_params(image_clusters, image_descriptors)
 
     model = model.to(device)
