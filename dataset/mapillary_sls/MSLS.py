@@ -5,13 +5,17 @@ import numpy as np
 import sys
 import torchvision.transforms as transforms
 import torch.utils.data as data
-
+import argparse
+import configparser
 import torch
+import h5py
+
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from os.path import join
 from sklearn.neighbors import NearestNeighbors
 from PIL import Image
+from tools import ROOT_DIR
 
 default_cities = {
     'train': ['trondheim', 'london', 'boston', 'melbourne', 'amsterdam', 'helsinki',
@@ -582,6 +586,65 @@ class MSLS(Dataset):
 
             return
 
-        # todo 如果model存在，那么就需要下面对图像进行特征提取
-        pass
+        # 判断当前读取的数据集批次是否为最后一批数据
+        if self.__current_subset >= len(self.__cached_subset_idx):
+            print('重置数据集批次...')
+            self.__current_subset = 0
 
+        # 得到当前批次的Query索引
+        q_choice_idxs = np.asarray(self.__cached_subset_idx[self.__current_subset])
+
+        # 得到Query的正例索引
+        p_idxs = np.unique([i for idx in self.__p_seq_idx[q_choice_idxs] for i in idx])
+
+        print('xxx')
+
+
+if __name__ == '__main__':
+    from models.models_generic import get_backbone, get_model
+
+    parser = argparse.ArgumentParser(description='MSLS Database')
+
+    parser.add_argument('--dataset_root_dir', type=str, default='/mnt/Dataset/Mapillary_Street_Level_Sequences',
+                        help='Root directory of dataset')
+    parser.add_argument('--config_path', type=str, default=join(ROOT_DIR, 'configs'), help='模型训练的配置文件的目录。')
+
+    opt = parser.parse_args()
+
+    config_file = join(opt.config_path, 'train.ini')
+    config = configparser.ConfigParser()
+    config.read(config_file)
+
+    encoding_model, encoding_dim = get_backbone(config)
+    model = get_model(encoding_model, encoding_dim, config,
+                      append_pca_layer=config['train'].getboolean('wpca'))
+
+    init_cache_file = join(join(ROOT_DIR, 'desired', 'centroids'),
+                           config['model'].get('backbone') + '_' +
+                           config['dataset'].get('name') + '_' +
+                           str(config['train'].getint('num_clusters')) + '_desc_cen.hdf5')
+    # 打开保存的聚类文件
+    with h5py.File(init_cache_file, mode='r') as h5:
+        # 获取图像聚类信息
+        image_clusters = h5.get('centroids')[:]
+        # 获取图像特征信息
+        image_descriptors = h5.get('descriptors')[:]
+
+        # 初始化模型参数
+        model.pool.init_params(image_clusters, image_descriptors)
+
+        del image_clusters, image_descriptors
+
+    train_dataset = MSLS(opt.dataset_root_dir,
+                         mode='train',
+                         cities_list='trondheim',
+                         img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
+                         negative_size=config['train'].getint('negative_size'),
+                         batch_size=config['train'].getint('batch_size'),
+                         exclude_panos=config['train'].getboolean('exclude_panos'))
+
+    train_dataset.new_epoch()
+
+    train_dataset.refresh_data(model, encoding_dim)
+
+    print('xx')
