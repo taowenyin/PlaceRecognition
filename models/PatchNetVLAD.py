@@ -178,14 +178,13 @@ class PatchNetVLAD(nn.Module):
 
         B, C, H, W = integral_feature.shape
 
+        # 产生[[1, 1],[1, 1]]的卷积核
         if integral_feature.get_device() == -1:
             conv_weight = torch.ones(C, 1, 2, 2)
         else:
             conv_weight = torch.ones(C, 1, 2, 2, device=integral_feature.get_device())
 
-        # [1 -1
-        # -1 1]
-        # 设置卷积核，通过设置4个点的符号来计算任意区域的积分图值
+        # 设置卷积核，通过设置4个点的符号来计算任意区域的积分图值，此时conv_weight为[[1, -1],[-1, 1]]
         conv_weight[:, :, 0, -1] = -1
         conv_weight[:, :, -1, 0] = -1
 
