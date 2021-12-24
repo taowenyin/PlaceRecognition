@@ -50,7 +50,8 @@ class ImagesFromList(Dataset):
 class MSLS(Dataset):
     def __init__(self, root_dir, mode='train', cities_list=None, img_resize=(480, 640), negative_size=5,
                  positive_distance_threshold=10, negative_distance_threshold=25, cached_queries=1000,
-                 batch_size=24, task='im2im', sub_task='all', seq_length=1, exclude_panos=True, positive_sampling=True):
+                 cached_negatives=1000, batch_size=24, task='im2im', sub_task='all', seq_length=1,
+                 exclude_panos=True, positive_sampling=True):
         """
         Mapillary Street-level Sequences数据集的读取
 
@@ -66,6 +67,7 @@ class MSLS(Dataset):
         :param positive_distance_threshold: 正例的距离阈值
         :param negative_distance_threshold: 反例的距离阈值，在该距离之内认为是非反例，之外才属于反例，同时正例要在正例阈值内才算正例，正例阈值和负例阈值之间属于非负例
         :param cached_queries: 每次缓存的Query总数，即每个完整的EPOCH中，数据的总量，和Batch Size不同
+        :param cached_negatives: 每次缓存的负例总数，即每个完整的EPOCH中，数据的总量，和Batch Size不同
         :param batch_size: 每批数据的大小
         :param task: 任务类型 [im2im, seq2seq, seq2im, im2seq]
         :param sub_task: 任务类型 [all, s2w, w2s, o2n, n2o, d2n, n2d]
@@ -107,6 +109,8 @@ class MSLS(Dataset):
         self.__positive_distance_threshold = positive_distance_threshold
         self.__negative_distance_threshold = negative_distance_threshold
         self.__cached_queries = cached_queries
+        self.__cached_negatives = cached_negatives
+        self.__batch_size = batch_size
 
         # 记录当前EPOCH调用数据集自己的次数，也就是多少个cached_queries数据
         self.__current_subset = 0
@@ -596,6 +600,23 @@ class MSLS(Dataset):
 
         # 得到Query的正例索引
         p_idxs = np.unique([i for idx in self.__p_seq_idx[q_choice_idxs] for i in idx])
+
+        # 从所有数据中选出cached_negatives个负例
+        n_idxs = np.random.choice(len(self.__db_images_key), self.__cached_negatives, replace=False)
+
+        # 确保选出的负例中没有正例
+        n_idxs = n_idxs[np.in1d(n_idxs,
+                                np.unique([i for idx in self.__non_negative_indices[q_choice_idxs] for i in idx]),
+                                invert=True)]
+
+        # 构建Query、Positive、negative数据载入器
+        opt = {'batch_size': self.__batch_size, 'shuffle': False}
+        q_loader = torch.utils.data.DataLoader(ImagesFromList(self.__q_images_key[q_choice_idxs],
+                                                              transform=self.__img_transform), **opt)
+        p_loader = torch.utils.data.DataLoader(ImagesFromList(self.__db_images_key[p_idxs],
+                                                              transform=self.__img_transform), **opt)
+        n_loader = torch.utils.data.DataLoader(ImagesFromList(self.__db_images_key[n_idxs],
+                                                              transform=self.__img_transform), **opt)
 
         print('xxx')
 
