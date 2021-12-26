@@ -154,6 +154,7 @@ if __name__ == '__main__':
 
     train_dataset = MSLS(opt.dataset_root_dir,
                          mode='train',
+                         device=device,
                          cities_list='trondheim',
                          img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                          negative_size=config['train'].getint('negative_size'),
@@ -162,6 +163,7 @@ if __name__ == '__main__':
 
     validation_dataset = MSLS(opt.dataset_root_dir,
                               mode='val',
+                              device=device,
                               cities_list='cph',
                               img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                               positive_distance_threshold=config['train'].getint('positive_distance_threshold'),

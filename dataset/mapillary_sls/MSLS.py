@@ -48,7 +48,7 @@ class ImagesFromList(Dataset):
 
 
 class MSLS(Dataset):
-    def __init__(self, root_dir, mode='train', cities_list=None, img_resize=(480, 640), negative_size=5,
+    def __init__(self, root_dir, device, mode='train', cities_list=None, img_resize=(480, 640), negative_size=5,
                  positive_distance_threshold=10, negative_distance_threshold=25, cached_queries=1000,
                  cached_negatives=1000, batch_size=24, task='im2im', sub_task='all', seq_length=1,
                  exclude_panos=True, positive_sampling=True):
@@ -60,6 +60,7 @@ class MSLS(Dataset):
         sub_task（子任务）：all，s2w（summer2winter），w2s（winter2summer），o2n（old2new），n2o（new2old），d2n（day2night），n2d（night2day）
 
         :param root_dir: 数据集的路径
+        :param device: 数据运行的设备
         :param mode: 数据集的模式[train, val, test]
         :param cities_list: 城市列表
         :param img_resize: 图像大小
@@ -103,6 +104,7 @@ class MSLS(Dataset):
         self.__triplets_data = []
 
         self.__mode = mode
+        self.__device = device
         self.__sub_task = sub_task
         self.__exclude_panos = exclude_panos
         self.__negative_size = negative_size
@@ -127,11 +129,11 @@ class MSLS(Dataset):
         self.__cached_subset_size = 0
 
         # 根据任务类型得到序列长度
-        if task == 'im2im': # 图像到图像
+        if task == 'im2im':  # 图像到图像
             seq_length_q, seq_length_db = 1, 1
-        elif task == 'seq2seq': # 图像序列到图像序列
+        elif task == 'seq2seq':  # 图像序列到图像序列
             seq_length_q, seq_length_db = seq_length, seq_length
-        elif task == 'seq2im': # 图像序列到图像
+        elif task == 'seq2im':  # 图像序列到图像
             seq_length_q, seq_length_db = seq_length, 1
         else:  # im2seq 图像到图像序列
             seq_length_q, seq_length_db = 1, seq_length
@@ -618,6 +620,69 @@ class MSLS(Dataset):
         n_loader = torch.utils.data.DataLoader(ImagesFromList(self.__db_images_key[n_idxs],
                                                               transform=self.__img_transform), **opt)
 
+        model.eval()
+        with torch.no_grad():
+            q_vectors = torch.zeros(len(q_choice_idxs), output_dim).to(self.__device)
+            p_vectors = torch.zeros(len(p_idxs), output_dim).to(self.__device)
+            n_vectors = torch.zeros(len(n_idxs), output_dim).to(self.__device)
+
+            batch_size = opt['batch_size']
+
+            print('===> 开始计算Query、Positive、Negative的VLAD特征')
+
+            # 获取Query的VLAD特征
+            q_data_bar = tqdm(enumerate(q_loader), total=len(q_choice_idxs) // batch_size, leave=False)
+            for i, (data, idx) in q_data_bar:
+                q_data_bar.set_description('[{}/{}]计算Batch Query的特征...'.format(i, q_data_bar.total))
+                image_descriptors = model.encoder(data.to(self.__device))
+                vlad_descriptors = model.pool(image_descriptors)
+                q_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
+
+            # 获取Positive的VLAD特征
+            p_data_bar = tqdm(enumerate(p_loader), total=len(p_idxs) // batch_size, leave=False)
+            for i, (data, idx) in p_data_bar:
+                p_data_bar.set_description('[{}/{}]计算Batch Positive的特征...'.format(i, p_data_bar.total))
+                image_descriptors = model.encoder(data.to(self.__device))
+                vlad_descriptors = model.pool(image_descriptors)
+                p_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
+
+            # 获取Negative的VLAD特征
+            n_data_bar = tqdm(enumerate(n_loader), total=len(n_idxs) // batch_size, leave=False)
+            for i, (data, idx) in n_data_bar:
+                n_data_bar.set_description('[{}/{}]计算Batch Negative的特征...'.format(i, n_data_bar.total))
+                image_descriptors = model.encoder(data.to(self.__device))
+                vlad_descriptors = model.pool(image_descriptors)
+                n_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
+
+        print('===> VLAD特征计算完成，搜索负例中...')
+
+        # 计算Query与Positive的余弦距离
+        p_cos_dis = torch.mm(q_vectors, p_vectors.t())
+        # 对余弦距离按照降序进行排序
+        p_cos_dis, p_cos_dis_rank = torch.sort(p_cos_dis, dim=1, descending=True)
+
+        # 计算Query与Negative的余弦距离
+        n_cos_dis = torch.mm(q_vectors, n_vectors.t())
+        # 对余弦距离按照降序进行排序
+        n_cos_dis, n_cos_dis_rank = torch.sort(n_cos_dis, dim=1, descending=True)
+
+        p_cos_dis, p_cos_dis_rank = p_cos_dis.cpu().numpy(), p_cos_dis_rank.cpu().numpy()
+        n_cos_dis, n_cos_dis_rank = n_cos_dis.cpu().numpy(), n_cos_dis_rank.cpu().numpy()
+
+        for q in range(len(q_choice_idxs)):
+            q_idx = q_choice_idxs[q]
+
+            # 找到正例的索引
+            cached_p_idx = np.where(np.in1d(p_idxs, self.__p_seq_idx[q_idx]))
+
+            p_idx = np.where(np.in1d(p_cos_dis_rank[q, :], cached_p_idx))
+
+            # 得到最近的正例
+            closest_positive = p_cos_dis_rank[q, p_idx][0][0]
+
+            # 得到所有负例的距离
+            dis_negative = n_cos_dis_rank[q, :]
+
         print('xxx')
 
 
@@ -629,12 +694,19 @@ if __name__ == '__main__':
     parser.add_argument('--dataset_root_dir', type=str, default='/mnt/Dataset/Mapillary_Street_Level_Sequences',
                         help='Root directory of dataset')
     parser.add_argument('--config_path', type=str, default=join(ROOT_DIR, 'configs'), help='模型训练的配置文件的目录。')
+    parser.add_argument('--no_cuda', action='store_true', help='如果使用该参数表示只使用CPU，否则使用GPU。')
 
     opt = parser.parse_args()
 
     config_file = join(opt.config_path, 'train.ini')
     config = configparser.ConfigParser()
     config.read(config_file)
+
+    cuda = not opt.no_cuda
+    if cuda and not torch.cuda.is_available():
+        raise Exception("没有找到GPU，运行时添加参数 --no_cuda")
+
+    device = torch.device("cuda" if cuda else "cpu")
 
     encoding_model, encoding_dim = get_backbone(config)
     model = get_model(encoding_model, encoding_dim, config,
@@ -658,6 +730,7 @@ if __name__ == '__main__':
 
     train_dataset = MSLS(opt.dataset_root_dir,
                          mode='train',
+                         device=device,
                          cities_list='trondheim',
                          img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                          negative_size=config['train'].getint('negative_size'),
@@ -665,6 +738,9 @@ if __name__ == '__main__':
                          exclude_panos=config['train'].getboolean('exclude_panos'))
 
     train_dataset.new_epoch()
+
+    if config['train']['pooling'].lower() == 'netvlad':
+        encoding_dim *= config['train'].getint('num_clusters')
 
     train_dataset.refresh_data(model, encoding_dim)
 

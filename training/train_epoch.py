@@ -44,6 +44,9 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
         cached_q_count_bar.set_description(
             '第{}/{}批Query数据'.format(sub_cached_q_iter, train_dataset.cached_subset_size))
 
+        if config['train']['pooling'].lower() == 'netvlad':
+            encoding_dim *= config['train'].getint('num_clusters')
+
         # 刷新数据
         train_dataset.refresh_data(model, encoding_dim)
 

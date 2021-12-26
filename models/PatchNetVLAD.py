@@ -101,7 +101,8 @@ class PatchNetVLAD(nn.Module):
             input_x = x.unsqueeze(0).permute(1, 0, 2, 3, 4)
             # 取出每个聚类中心，形状为(1, encoding_dim)，把该中心点的形状变为(1, encoding_dim, H, W)，
             # 再变为(1, 1, encoding_dim, H, W)，与X的形状保持一致
-            centroids = self.__centroids[0:1, :].expand(x.size(2), x.size(3), -1, -1).permute(2, 3, 0, 1).unsqueeze(0)
+            centroids = self.__centroids[i:i + 1, :].expand(x.size(2),
+                                                            x.size(3), -1, -1).permute(2, 3, 0, 1).unsqueeze(0)
 
             # 计算X与每个中心点的残差
             residual = input_x - centroids

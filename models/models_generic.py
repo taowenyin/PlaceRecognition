@@ -14,6 +14,7 @@ from tools import ROOT_DIR
 from tqdm import tqdm
 from sklearn.cluster import KMeans
 from models.PatchNetVLAD import PatchNetVLAD
+from models.NetVLAD import NetVLAD
 
 
 def get_backbone(config):
@@ -69,6 +70,11 @@ def get_model(encoding_model, encoding_dim, config, append_pca_layer=True):
                                 patch_sizes=config['train'].get('patch_sizes'),
                                 strides=config['train'].get('strides'),
                                 vlad_v2=config['train'].getboolean('vlad_v2'))
+        nn_model.add_module('pool', net_vlad)
+    elif config['train'].get('pooling').lower() == 'netvlad':
+        net_vlad = NetVLAD(num_clusters=config['train'].getint('num_clusters'),
+                           encoding_dim=encoding_dim,
+                           vlad_v2=config['train'].getboolean('vlad_v2'))
         nn_model.add_module('pool', net_vlad)
     else:
         raise ValueError('未知的Pooling类型: {}'.format(config['train'].get('pooling')))
