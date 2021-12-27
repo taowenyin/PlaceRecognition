@@ -631,7 +631,7 @@ class MSLS(Dataset):
             print('===> 开始计算Query、Positive、Negative的VLAD特征')
 
             # 获取Query的VLAD特征
-            q_data_bar = tqdm(enumerate(q_loader), total=len(q_choice_idxs) // batch_size, leave=False)
+            q_data_bar = tqdm(enumerate(q_loader), total=len(q_choice_idxs) // batch_size, leave=True)
             for i, (data, idx) in q_data_bar:
                 q_data_bar.set_description('[{}/{}]计算Batch Query的特征...'.format(i, q_data_bar.total))
                 image_descriptors = model.encoder(data.to(self.__device))
@@ -639,7 +639,7 @@ class MSLS(Dataset):
                 q_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
 
             # 获取Positive的VLAD特征
-            p_data_bar = tqdm(enumerate(p_loader), total=len(p_idxs) // batch_size, leave=False)
+            p_data_bar = tqdm(enumerate(p_loader), total=len(p_idxs) // batch_size, leave=True)
             for i, (data, idx) in p_data_bar:
                 p_data_bar.set_description('[{}/{}]计算Batch Positive的特征...'.format(i, p_data_bar.total))
                 image_descriptors = model.encoder(data.to(self.__device))
@@ -647,7 +647,7 @@ class MSLS(Dataset):
                 p_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
 
             # 获取Negative的VLAD特征
-            n_data_bar = tqdm(enumerate(n_loader), total=len(n_idxs) // batch_size, leave=False)
+            n_data_bar = tqdm(enumerate(n_loader), total=len(n_idxs) // batch_size, leave=True)
             for i, (data, idx) in n_data_bar:
                 n_data_bar.set_description('[{}/{}]计算Batch Negative的特征...'.format(i, n_data_bar.total))
                 image_descriptors = model.encoder(data.to(self.__device))
@@ -677,13 +677,44 @@ class MSLS(Dataset):
 
             p_idx = np.where(np.in1d(p_cos_dis_rank[q, :], cached_p_idx))
 
-            # 得到最近的正例
-            closest_positive = p_cos_dis_rank[q, p_idx][0][0]
+            # 得到最近的正例，[q, p_idx]表示第q行，第p_idx列，
+            # 但这个p_idx有好几个，并且[q, p_idx]返回的依然是原数组的维度
+            closest_positive = p_cos_dis[q, p_idx][0][0]
 
             # 得到所有负例的距离
-            dis_negative = n_cos_dis_rank[q, :]
+            dis_negative = n_cos_dis[q, :]
 
-        print('xxx')
+            # 计算最近距离与负例距离之间的差值，理论上应该都为负值
+            distance = closest_positive - dis_negative
+
+            # 如果距离差值大于0，说明就是错误
+            error_negative = (distance > 0)
+
+            # 如果正确的负例数小于需要的负例数，那么就跳过该Query
+            if np.sum(error_negative) < self.__negative_size:
+                continue
+
+            # 获取距离最大的__negative_size个负例
+            hardest_negative_idx = np.argsort(distance)[:self.__negative_size]
+            # 获取Hardest Negative索引
+            cached_hardest_negative = n_cos_dis_rank[q, hardest_negative_idx]
+
+            # 找出最近的正例索引
+            cached_p_idx = p_cos_dis_rank[q, p_idx][0][0]
+
+            # 还原为原始的图像索引
+            q_idx = self.__q_seq_idx[q_idx]
+            p_idx = p_idxs[cached_p_idx]
+            hardest_neg = n_idxs[cached_hardest_negative]
+
+            # 打包三元对象
+            triplet = [q_idx, p_idx, *hardest_neg]
+            target = [-1, 1] + [0] * len(hardest_neg)
+
+            self.__triplets_data.append((triplet, target))
+
+        # 子数据集调用次数+1
+        self.__current_subset += 1
 
 
 if __name__ == '__main__':
@@ -741,6 +772,8 @@ if __name__ == '__main__':
 
     if config['train']['pooling'].lower() == 'netvlad':
         encoding_dim *= config['train'].getint('num_clusters')
+
+    model = model.to(device)
 
     train_dataset.refresh_data(model, encoding_dim)
 
