@@ -7,7 +7,7 @@ from sklearn.neighbors import NearestNeighbors
 
 
 class PatchNetVLAD(nn.Module):
-    def __init__(self, num_clusters, encoding_dim, patch_sizes='4', strides='1', vlad_v2=False):
+    def __init__(self, num_clusters, encoding_dim, patch_sizes='4', strides='1', normalize_input=True, vlad_v2=False):
         """
         PatchNetVLAD模型
 
@@ -22,6 +22,7 @@ class PatchNetVLAD(nn.Module):
         self.__encoding_dim = encoding_dim
         self.__alpha = 0
         self.__patch_sizes = patch_sizes
+        self.__normalize_input = normalize_input
         self.__vlad_v2 = vlad_v2
 
         self.__conv = nn.Conv2d(encoding_dim, num_clusters, kernel_size=(1, 1), bias=vlad_v2)
@@ -82,6 +83,10 @@ class PatchNetVLAD(nn.Module):
 
     def forward(self, x):
         B, C, H, W = x.shape
+
+        # 跨通道归一化
+        if self.__normalize_input:
+            x = F.normalize(x, p=2, dim=1)
 
         # ======步骤一：NetVLAD的soft-assignment部分======
         # 经过一个1x1的卷积，从（B, C, H, W）->(B, K, H, W)
@@ -165,7 +170,7 @@ class PatchNetVLAD(nn.Module):
         feature_out = torch.cumsum(feature_in, dim=-1)
         feature_out = torch.cumsum(feature_out, dim=-2)
         # todo 不知道是什么意思
-        # 在最后两个维度上增加一个Padding
+        # 在最后两个维度上增加一个Padding，(B, D, H, W) -> (B, D, H+1, W+1)
         feature_out = torch.nn.functional.pad(feature_out, (1, 0, 1, 0), "constant", 0)
 
         return feature_out

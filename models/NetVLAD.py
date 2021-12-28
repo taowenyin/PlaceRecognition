@@ -7,7 +7,7 @@ from sklearn.neighbors import NearestNeighbors
 
 
 class NetVLAD(nn.Module):
-    def __init__(self, num_clusters, encoding_dim, vlad_v2=False):
+    def __init__(self, num_clusters, encoding_dim, normalize_input=True, vlad_v2=False):
         """
         NetVLAD模型
 
@@ -20,6 +20,7 @@ class NetVLAD(nn.Module):
         self.__num_clusters = num_clusters
         self.__encoding_dim = encoding_dim
         self.__alpha = 0
+        self.__normalize_input = normalize_input
         self.__vlad_v2 = vlad_v2
 
         self.__conv = nn.Conv2d(encoding_dim, num_clusters, kernel_size=(1, 1), bias=vlad_v2)
@@ -71,6 +72,10 @@ class NetVLAD(nn.Module):
 
     def forward(self, x):
         B, C = x.shape[:2]
+
+        # 跨通道归一化
+        if self.__normalize_input:
+            x = F.normalize(x, p=2, dim=1)
 
         # ======步骤一：NetVLAD的soft-assignment部分======
         # 经过一个1x1的卷积，从（B, C, H, W）->(B, K, HxW)

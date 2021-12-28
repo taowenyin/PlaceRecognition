@@ -17,6 +17,20 @@ from models.PatchNetVLAD import PatchNetVLAD
 from models.NetVLAD import NetVLAD
 
 
+class Flatten(nn.Module):
+    def forward(self, x):
+        return x.view(x.size(0), -1)
+
+
+class L2Norm(nn.Module):
+    def __init__(self, dim=1):
+        super().__init__()
+        self.dim = dim
+
+    def forward(self, x):
+        return F.normalize(x, p=2, dim=self.dim)
+
+
 def get_backbone(config):
     """
     获取BackBone的模型
@@ -51,7 +65,7 @@ def get_backbone(config):
     return encoding_model, encoding_dim
 
 
-def get_model(encoding_model, encoding_dim, config, append_pca_layer=True):
+def get_model(encoding_model, encoding_dim, config, append_pca_layer=False):
     """
     获取训练模型
 
@@ -76,8 +90,25 @@ def get_model(encoding_model, encoding_dim, config, append_pca_layer=True):
                            encoding_dim=encoding_dim,
                            vlad_v2=config['train'].getboolean('vlad_v2'))
         nn_model.add_module('pool', net_vlad)
+    elif config['train'].get['pooling'].lower() == 'max':
+        global_pool = nn.AdaptiveMaxPool2d((1, 1))
+        nn_model.add_module('pool', nn.Sequential(*[global_pool, Flatten(), L2Norm()]))
+    elif config['train'].get['pooling'].pooling.lower() == 'avg':
+        global_pool = nn.AdaptiveAvgPool2d((1, 1))
+        nn_model.add_module('pool', nn.Sequential(*[global_pool, Flatten(), L2Norm()]))
     else:
         raise ValueError('未知的Pooling类型: {}'.format(config['train'].get('pooling')))
+
+    if append_pca_layer:
+        # PCA后的维度
+        num_pcas = config['train'].getint('num_pcas')
+
+        if config['train'].get('pooling').lower() == 'netvlad' or \
+                config['train'].get('pooling').lower() == 'patchnetvlad':
+            encoding_dim *= config['train'].getint('num_clusters')
+
+        pca_conv = nn.Conv2d(encoding_dim, num_pcas, kernel_size=(1, 1), stride=(1, 1), padding=0)
+        nn_model.add_module('WPCA', nn.Sequential(*[pca_conv, Flatten(), L2Norm(dim=-1)]))
 
     return nn_model
 
