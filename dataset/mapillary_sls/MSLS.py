@@ -564,6 +564,10 @@ class MSLS(Dataset):
         # 清空数据
         self.__triplets_data.clear()
 
+        # ========================================================================
+        # 如果模型不存在，那么使用UTM来计算图像拍摄的位置，然后获取Query的正例和反例
+        # ========================================================================
+
         if model is None:
             # 随机从q_seq_idx中采样cached_queries长度的数据索引
             q_choice_idxs = np.random.choice(len(self.__q_seq_idx), self.__cached_queries, replace=False)
@@ -593,6 +597,10 @@ class MSLS(Dataset):
             self.__current_subset += 1
 
             return
+
+        # ========================================================================
+        # 如果模型存在，那么使用模型对图像进行特征提取，然后计算特征之间距离来获取Query的正例和反例
+        # ========================================================================
 
         # 判断当前读取的数据集批次是否为最后一批数据
         if self.__current_subset >= len(self.__cached_subset_idx):
@@ -744,6 +752,8 @@ if __name__ == '__main__':
     config = configparser.ConfigParser()
     config.read(config_file)
 
+    dataset_name = config['dataset'].get('name')
+
     cuda = not opt.no_cuda
     if cuda and not torch.cuda.is_available():
         raise Exception("没有找到GPU，运行时添加参数 --no_cuda")
@@ -756,8 +766,8 @@ if __name__ == '__main__':
 
     init_cache_file = join(join(ROOT_DIR, 'desired', 'centroids'),
                            config['model'].get('backbone') + '_' +
-                           config['dataset'].get('name') + '_' +
-                           str(config['train'].getint('num_clusters')) + '_desc_cen.hdf5')
+                           dataset_name + '_' +
+                           str(config[dataset_name].getint('num_clusters')) + '_desc_cen.hdf5')
     # 打开保存的聚类文件
     with h5py.File(init_cache_file, mode='r') as h5:
         # 获取图像聚类信息
@@ -783,7 +793,7 @@ if __name__ == '__main__':
     train_dataset.new_epoch()
 
     if config['train']['pooling'].lower() == 'netvlad' or config['train']['pooling'].lower() == 'patchnetvlad':
-        encoding_dim *= config['train'].getint('num_clusters')
+        encoding_dim *= config[dataset_name].getint('num_clusters')
 
     model = model.to(device)
 

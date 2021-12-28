@@ -26,13 +26,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='移动机器人位置识别模型')
 
     parser.add_argument('--dataset_root_dir', type=str, default='/mnt/Dataset/Mapillary_Street_Level_Sequences',
-                        help='数据集的根目录。')
-    parser.add_argument('--config_path', type=str, default=join(ROOT_DIR, 'configs'), help='模型训练的配置文件的目录。')
-    parser.add_argument('--no_cuda', action='store_true', help='如果使用该参数表示只使用CPU，否则使用GPU。')
-    parser.add_argument('--resume_file', type=str, help='checkpoint文件的保存路径，用于从checkpoint载入训练参数，再次恢复训练。')
-    parser.add_argument('--cluster_file', type=str, help='聚类数据的保存路径，恢复训练。')
+                        help='数据集的根目录')
+    parser.add_argument('--config_path', type=str, default=join(ROOT_DIR, 'configs'), help='模型训练的配置文件的目录')
+    parser.add_argument('--save_checkpoint_path', type=str, default=join(ROOT_DIR, 'desired', 'checkpoint'),
+                        help='模型checkpoint的保存目录')
+    parser.add_argument('--no_cuda', action='store_true', help='如果使用该参数表示只使用CPU，否则使用GPU')
+    parser.add_argument('--resume_file', type=str, help='checkpoint文件的保存路径，用于从checkpoint载入训练参数，再次恢复训练')
+    parser.add_argument('--cluster_file', type=str, help='聚类数据的保存路径，恢复训练')
     parser.add_argument('--start_epoch', default=0, type=int, metavar='N', help='手动设置迭代开始位置，用于重新开始的训练')
     parser.add_argument('--epochs_count', default=30, type=int, help='模型训练的周期数')
+    parser.add_argument('--save_every_epoch', action='store_true', help='是否开启每个EPOCH都进行checkpoint保存')
 
     opt = parser.parse_args()
 
@@ -55,19 +58,22 @@ if __name__ == '__main__':
     if cuda:
         torch.cuda.manual_seed(config['train'].getint('seed'))
 
+    # 获得数据集名称
+    dataset_name = config['dataset'].get('name')
+
     print('===> 构建网络模型')
 
     print('===> 构建基础BackBone模型')
     encoding_model, encoding_dim = get_backbone(config)
 
     if opt.resume_file:
-        opt.resume_file = join(join(ROOT_DIR, 'desired/checkpoint'), opt.resume_file)
+        opt.resume_file = join(join(ROOT_DIR, 'desired', 'checkpoint'), opt.resume_file)
 
         if isfile(opt.resume_file):
             print('===> 载入checkpoint "{}"中...'.format(opt.resume_file))
             checkpoint = torch.load(opt.resume_file, map_location=lambda storage, loc: storage)
             # 保存载入的聚类中心点的
-            config['train']['num_clusters'] = str(checkpoint['state_dict']['pool.centroids'].shape[0])
+            config[dataset_name]['num_clusters'] = str(checkpoint['state_dict']['pool.centroids'].shape[0])
 
             model = get_model(encoding_model, encoding_dim, config,
                               append_pca_layer=config['train'].getboolean('wpca'))
@@ -89,8 +95,8 @@ if __name__ == '__main__':
         # 保存的图像特征
         init_cache_file = join(join(ROOT_DIR, 'desired', 'centroids'),
                                config['model'].get('backbone') + '_' +
-                               config['dataset'].get('name') + '_' +
-                               str(config['train'].getint('num_clusters')) + '_desc_cen.hdf5')
+                               dataset_name + '_' +
+                               str(config[dataset_name].getint('num_clusters')) + '_desc_cen.hdf5')
 
         if opt.cluster_file:
             opt.cluster_file = join(join(ROOT_DIR, 'desired', 'centroids'), opt.cluster_file)
@@ -169,17 +175,14 @@ if __name__ == '__main__':
     print('===> 开始训练...')
 
     # 保存训练参数的路径
-    opt.resume_dir = join(ROOT_DIR, 'desired/checkpoint')
+    opt.resume_dir = join(ROOT_DIR, 'desired', 'checkpoint')
     # 如果目录不存在就创建目录
     if not exists(opt.resume_dir):
         makedirs(opt.resume_dir)
 
     # 保存可视化结果的路径
-    opt.result_dir = join(ROOT_DIR, 'result',
-                          config['model'].get('backbone'),
-                          config['dataset'].get('name'),
-                          config['train'].get('num_clusters'),
-                          datetime.now().strftime('%Y_%m_%d_%H-%M-%S'))
+    opt.result_dir = join(ROOT_DIR, 'result', config['model'].get('backbone'), dataset_name,
+                          config[dataset_name].get('num_clusters'), datetime.now().strftime('%Y_%m_%d_%H-%M-%S'))
     if not exists(opt.result_dir):
         makedirs(opt.result_dir)
 

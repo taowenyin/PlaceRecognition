@@ -1,4 +1,5 @@
 import torch
+import math
 
 from dataset.mapillary_sls.MSLS import MSLS
 from configparser import ConfigParser
@@ -35,8 +36,11 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
     # 每个训练周期中，Step的起始索引
     start_iter = 1
 
-    # 计算一种有多少个Batch
-    batch_count = len(train_dataset.q_seq_idx) // config['train'].getint('batch_size')
+    # 计算有多少个Batch
+    batch_count = math.ceil(len(train_dataset.q_seq_idx) / config['train'].getint('batch_size'))
+
+    # 获得数据集名称
+    dataset_name = config['dataset'].get('name')
 
     # 迭代每一批Query
     cached_q_count_bar = trange(train_dataset.cached_subset_size)
@@ -44,8 +48,8 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
         cached_q_count_bar.set_description(
             '第{}/{}批Query数据'.format(sub_cached_q_iter, train_dataset.cached_subset_size))
 
-        if config['train']['pooling'].lower() == 'netvlad':
-            encoding_dim *= config['train'].getint('num_clusters')
+        if config['train']['pooling'].lower() == 'netvlad' or config['train']['pooling'].lower() == 'patchnetvlad':
+            encoding_dim *= config[dataset_name].getint('num_clusters')
 
         # 刷新数据
         train_dataset.refresh_data(model, encoding_dim)
@@ -79,12 +83,39 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
             pooling_data = model.pool(data_encoding)
 
             # 把Pooling的数据分为Query、正例和负例
-            pooling_Q, pooling_P, pooling_N = torch.split(pooling_data, [B, B, neg_size])
+            pooling_q, pooling_p, pooling_n = torch.split(pooling_data, [B, B, neg_size])
 
             optimizer.zero_grad()
 
-            # todo 训练还未结束
+            # 对每个Query、Positive、Negative组成的三元对象进行Loss计算，由于每个Query对应的Negative数量不同，所以需要这样计算
+            loss = 0
+            for i, neg_count in enumerate(neg_counts):
+                for n in range(neg_count):
+                    neg_ix = (torch.sum(neg_counts[:i]) + n).item()
+                    loss += criterion(pooling_q[i: i + 1], pooling_p[i: i + 1], pooling_n[neg_ix:neg_ix + 1])
 
-            pass
+            # 对损失求平均
+            loss /= neg_size.float().to(device)
 
-    pass
+            loss.backward()
+            optimizer.step()
+            del data_input, data_encoding, pooling_data, pooling_q, pooling_p, pooling_n
+            del query, positives, negatives
+
+            batch_loss = loss.item()
+            epoch_loss += batch_loss
+
+            if iteration % 50 == 0 or batch_count <= 10:
+                # todo 记录损失
+                print('xxx')
+
+        start_iter += len(training_data_loader)
+        del training_data_loader, loss
+        optimizer.zero_grad()
+        torch.cuda.empty_cache()
+
+    # 计算平均损失
+    avg_loss = epoch_loss / batch_count
+
+    # todo 记录损失
+    print('xxx')

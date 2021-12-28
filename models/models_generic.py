@@ -78,15 +78,18 @@ def get_model(encoding_model, encoding_dim, config, append_pca_layer=False):
     nn_model = nn.Module()
     nn_model.add_module('encoder', encoding_model)
 
+    # 数据集名称
+    dataset_name = config['dataset'].get('name')
+
     if config['train'].get('pooling').lower() == 'patchnetvlad':
-        net_vlad = PatchNetVLAD(num_clusters=config['train'].getint('num_clusters'),
+        net_vlad = PatchNetVLAD(num_clusters=config[dataset_name].getint('num_clusters'),
                                 encoding_dim=encoding_dim,
                                 patch_sizes=config['train'].get('patch_sizes'),
                                 strides=config['train'].get('strides'),
                                 vlad_v2=config['train'].getboolean('vlad_v2'))
         nn_model.add_module('pool', net_vlad)
     elif config['train'].get('pooling').lower() == 'netvlad':
-        net_vlad = NetVLAD(num_clusters=config['train'].getint('num_clusters'),
+        net_vlad = NetVLAD(num_clusters=config[dataset_name].getint('num_clusters'),
                            encoding_dim=encoding_dim,
                            vlad_v2=config['train'].getboolean('vlad_v2'))
         nn_model.add_module('pool', net_vlad)
@@ -105,7 +108,7 @@ def get_model(encoding_model, encoding_dim, config, append_pca_layer=False):
 
         if config['train'].get('pooling').lower() == 'netvlad' or \
                 config['train'].get('pooling').lower() == 'patchnetvlad':
-            encoding_dim *= config['train'].getint('num_clusters')
+            encoding_dim *= config[dataset_name].getint('num_clusters')
 
         pca_conv = nn.Conv2d(encoding_dim, num_pcas, kernel_size=(1, 1), stride=(1, 1), padding=0)
         nn_model.add_module('WPCA', nn.Sequential(*[pca_conv, Flatten(), L2Norm(dim=-1)]))
@@ -126,6 +129,9 @@ def create_image_clusters(cluster_set, model, encoding_dim, device, config, save
     """
     # 获取图像Resize大小
     resize = tuple(map(int, str.split(config['train'].get('resize'), ',')))
+
+    # 数据集名称
+    dataset_name = config['dataset'].get('name')
 
     # 一共要保存的图像特征数
     descriptors_size = 50000
@@ -188,7 +194,7 @@ def create_image_clusters(cluster_set, model, encoding_dim, device, config, save
 
         print('====> 开始进行聚类..')
         # 定义聚类方法KMeans
-        kmeans = KMeans(n_clusters=config['train'].getint('num_clusters'), max_iter=100)
+        kmeans = KMeans(n_clusters=config[dataset_name].getint('num_clusters'), max_iter=100)
         # 拟合图像特征数据
         kmeans.fit(db_feature[...])
 
