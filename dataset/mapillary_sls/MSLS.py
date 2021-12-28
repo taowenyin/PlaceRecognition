@@ -48,7 +48,7 @@ class ImagesFromList(Dataset):
 
 
 class MSLS(Dataset):
-    def __init__(self, root_dir, device, mode='train', cities_list=None, img_resize=(480, 640), negative_size=5,
+    def __init__(self, root_dir, device, config, mode='train', cities_list=None, img_resize=(480, 640), negative_size=5,
                  positive_distance_threshold=10, negative_distance_threshold=25, cached_queries=1000,
                  cached_negatives=1000, batch_size=24, task='im2im', sub_task='all', seq_length=1,
                  exclude_panos=True, positive_sampling=True):
@@ -61,6 +61,7 @@ class MSLS(Dataset):
 
         :param root_dir: 数据集的路径
         :param device: 数据运行的设备
+        :param config: 配置信息
         :param mode: 数据集的模式[train, val, test]
         :param cities_list: 城市列表
         :param img_resize: 图像大小
@@ -105,6 +106,7 @@ class MSLS(Dataset):
 
         self.__mode = mode
         self.__device = device
+        self.__config = config
         self.__sub_task = sub_task
         self.__exclude_panos = exclude_panos
         self.__negative_size = negative_size
@@ -636,6 +638,9 @@ class MSLS(Dataset):
                 q_data_bar.set_description('[{}/{}]计算Batch Query的特征...'.format(i, q_data_bar.total))
                 image_descriptors = model.encoder(data.to(self.__device))
                 vlad_descriptors = model.pool(image_descriptors)
+                # 如果是PatchNetVLAD那么只是用Global VLAD
+                if config['train'].get('pooling') == 'patchnetvlad':
+                    vlad_descriptors = vlad_descriptors[1]
                 q_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
 
             # 获取Positive的VLAD特征
@@ -644,6 +649,9 @@ class MSLS(Dataset):
                 p_data_bar.set_description('[{}/{}]计算Batch Positive的特征...'.format(i, p_data_bar.total))
                 image_descriptors = model.encoder(data.to(self.__device))
                 vlad_descriptors = model.pool(image_descriptors)
+                # 如果是PatchNetVLAD那么只是用Global VLAD
+                if config['train'].get('pooling') == 'patchnetvlad':
+                    vlad_descriptors = vlad_descriptors[1]
                 p_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
 
             # 获取Negative的VLAD特征
@@ -652,6 +660,9 @@ class MSLS(Dataset):
                 n_data_bar.set_description('[{}/{}]计算Batch Negative的特征...'.format(i, n_data_bar.total))
                 image_descriptors = model.encoder(data.to(self.__device))
                 vlad_descriptors = model.pool(image_descriptors)
+                # 如果是PatchNetVLAD那么只是用Global VLAD
+                if config['train'].get('pooling') == 'patchnetvlad':
+                    vlad_descriptors = vlad_descriptors[1]
                 n_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
 
         print('===> VLAD特征计算完成，搜索负例中...')
@@ -762,6 +773,7 @@ if __name__ == '__main__':
     train_dataset = MSLS(opt.dataset_root_dir,
                          mode='train',
                          device=device,
+                         config=config,
                          cities_list='trondheim',
                          img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                          negative_size=config['train'].getint('negative_size'),
@@ -770,7 +782,7 @@ if __name__ == '__main__':
 
     train_dataset.new_epoch()
 
-    if config['train']['pooling'].lower() == 'netvlad':
+    if config['train']['pooling'].lower() == 'netvlad' or config['train']['pooling'].lower() == 'patchnetvlad':
         encoding_dim *= config['train'].getint('num_clusters')
 
     model = model.to(device)

@@ -107,8 +107,7 @@ if __name__ == '__main__':
             print('===> 寻找聚类中心点')
 
             print('===> 载入聚类数据集')
-            train_dataset = MSLS(opt.dataset_root_dir,
-                                 mode='test', cities_list='train',
+            train_dataset = MSLS(opt.dataset_root_dir, device=device, config=config, mode='test', cities_list='train',
                                  img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                                  batch_size=config['train'].getint('batch_size'))
 
@@ -152,19 +151,13 @@ if __name__ == '__main__':
 
     print('===> 载入训练和验证数据集')
 
-    train_dataset = MSLS(opt.dataset_root_dir,
-                         mode='train',
-                         device=device,
-                         cities_list='trondheim',
+    train_dataset = MSLS(opt.dataset_root_dir, mode='train', device=device, config=config, cities_list='trondheim',
                          img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                          negative_size=config['train'].getint('negative_size'),
                          batch_size=config['train'].getint('batch_size'),
                          exclude_panos=config['train'].getboolean('exclude_panos'))
 
-    validation_dataset = MSLS(opt.dataset_root_dir,
-                              mode='val',
-                              device=device,
-                              cities_list='cph',
+    validation_dataset = MSLS(opt.dataset_root_dir, mode='val', device=device, config=config, cities_list='cph',
                               img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                               positive_distance_threshold=config['train'].getint('positive_distance_threshold'),
                               batch_size=config['train'].getint('batch_size'),

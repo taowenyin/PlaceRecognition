@@ -115,6 +115,7 @@ def get_model(encoding_model, encoding_dim, config, append_pca_layer=False):
 
 def create_image_clusters(cluster_set, model, encoding_dim, device, config, save_file):
     """
+    计算并保存图像聚类信息
 
     :param cluster_set: 用于计算聚类的数据集
     :param model: 用于提取图像特征的模型
