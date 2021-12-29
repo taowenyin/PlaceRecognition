@@ -1,5 +1,10 @@
 import torch
 import math
+import argparse
+import configparser
+import h5py
+import torch.optim as optim
+import torch.nn as nn
 
 from dataset.mapillary_sls.MSLS import MSLS
 from configparser import ConfigParser
@@ -7,6 +12,8 @@ from tqdm import trange
 from torch.utils.data import DataLoader
 from torch.nn import Module
 from tqdm import tqdm
+from os.path import join
+from tools import ROOT_DIR
 
 
 def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encoding_dim, device, opt, config: ConfigParser):
@@ -22,11 +29,6 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
     :param opt: 传入的参数
     :param config: 训练的配置参数
     """
-
-    if device.type == 'cuda':
-        cuda = True
-    else:
-        cuda = False
 
     train_dataset.new_epoch()
 
@@ -72,6 +74,9 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
             B, C, H, W = query.shape
             # 计算所有Query对应的反例数量和
             neg_size = torch.sum(neg_counts)
+            # todo 合并
+            query = query.unsqueeze(1)
+            positives = positives.unsqueeze(1)
             # 把Query、Positives和Negatives进行拼接，合并成一个Tensor
             data_input = torch.cat([query, positives, negatives])
             # 把数据放到GPU中
@@ -119,3 +124,67 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
 
     # todo 记录损失
     print('xxx')
+
+
+if __name__ == '__main__':
+    from models.models_generic import get_backbone, get_model
+
+    parser = argparse.ArgumentParser(description='Train Epoch')
+
+    parser.add_argument('--dataset_root_dir', type=str, default='/mnt/Dataset/Mapillary_Street_Level_Sequences',
+                        help='Root directory of dataset')
+    parser.add_argument('--config_path', type=str, default=join(ROOT_DIR, 'configs'), help='模型训练的配置文件的目录。')
+    parser.add_argument('--no_cuda', action='store_true', help='如果使用该参数表示只使用CPU，否则使用GPU。')
+
+    opt = parser.parse_args()
+
+    config_file = join(opt.config_path, 'train.ini')
+    config = configparser.ConfigParser()
+    config.read(config_file)
+
+    dataset_name = config['dataset'].get('name')
+
+    cuda = not opt.no_cuda
+    if cuda and not torch.cuda.is_available():
+        raise Exception("没有找到GPU，运行时添加参数 --no_cuda")
+
+    device = torch.device("cuda" if cuda else "cpu")
+
+    encoding_model, encoding_dim = get_backbone(config)
+    model = get_model(encoding_model, encoding_dim, config,
+                      append_pca_layer=config['train'].getboolean('wpca'))
+
+    init_cache_file = join(join(ROOT_DIR, 'desired', 'centroids'),
+                           config['model'].get('backbone') + '_' +
+                           dataset_name + '_' +
+                           str(config[dataset_name].getint('num_clusters')) + '_desc_cen.hdf5')
+    # 打开保存的聚类文件
+    with h5py.File(init_cache_file, mode='r') as h5:
+        # 获取图像聚类信息
+        image_clusters = h5.get('centroids')[:]
+        # 获取图像特征信息
+        image_descriptors = h5.get('descriptors')[:]
+
+        # 初始化模型参数
+        model.pool.init_params(image_clusters, image_descriptors)
+
+        del image_clusters, image_descriptors
+
+    train_dataset = MSLS(opt.dataset_root_dir,
+                         mode='train',
+                         device=device,
+                         config=config,
+                         cities_list='trondheim',
+                         img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
+                         negative_size=config['train'].getint('negative_size'),
+                         batch_size=config['train'].getint('batch_size'),
+                         exclude_panos=config['train'].getboolean('exclude_panos'))
+
+    optimizer = optim.Adam(filter(lambda par: par.requires_grad, model.parameters()),
+                           lr=config['train'].getfloat('lr'))
+
+    criterion = nn.TripletMarginLoss(margin=config['train'].getfloat('margin') ** 0.5,
+                                     p=2, reduction='sum').to(device)
+
+    model = model.to(device)
+    train_epoch(train_dataset, model, optimizer, criterion, encoding_dim, device, opt, config)

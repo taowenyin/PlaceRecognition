@@ -647,7 +647,7 @@ class MSLS(Dataset):
                 image_descriptors = model.encoder(data.to(self.__device))
                 vlad_descriptors = model.pool(image_descriptors)
                 # 如果是PatchNetVLAD那么只是用Global VLAD
-                if config['train'].get('pooling') == 'patchnetvlad':
+                if self.__config['train'].get('pooling') == 'patchnetvlad':
                     vlad_descriptors = vlad_descriptors[1]
                 q_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
 
@@ -658,7 +658,7 @@ class MSLS(Dataset):
                 image_descriptors = model.encoder(data.to(self.__device))
                 vlad_descriptors = model.pool(image_descriptors)
                 # 如果是PatchNetVLAD那么只是用Global VLAD
-                if config['train'].get('pooling') == 'patchnetvlad':
+                if self.__config['train'].get('pooling') == 'patchnetvlad':
                     vlad_descriptors = vlad_descriptors[1]
                 p_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
 
@@ -669,7 +669,7 @@ class MSLS(Dataset):
                 image_descriptors = model.encoder(data.to(self.__device))
                 vlad_descriptors = model.pool(image_descriptors)
                 # 如果是PatchNetVLAD那么只是用Global VLAD
-                if config['train'].get('pooling') == 'patchnetvlad':
+                if self.__config['train'].get('pooling') == 'patchnetvlad':
                     vlad_descriptors = vlad_descriptors[1]
                 n_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
 

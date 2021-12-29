@@ -18,8 +18,8 @@ from tqdm import trange
 from time import sleep
 from training.train_epoch import train_epoch
 from model_validation.validation import validation
-from training.tools import save_checkpoint
 from datetime import datetime
+from tools.common import save_checkpoint
 
 
 if __name__ == '__main__':
