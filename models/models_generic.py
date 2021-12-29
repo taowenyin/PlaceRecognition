@@ -47,13 +47,10 @@ def get_backbone(config):
         # 图像编码模型为VGG-16，并且采用ImageNet的预训练参数
         encoding_model = vgg16(pretrained=True)
     else:
-        # 模型的输出维度
-        encoding_dim = 512
-        # 图像编码模型为VGG-16，并且采用ImageNet的预训练参数
-        encoding_model = vgg16(pretrained=True)
+        raise ValueError('未知的BackBone类型: {}'.format(config['model'].get('backbone')))
 
     # 获取所有的网络层
-    layers = list(encoding_model.children())[:-2]
+    layers = list(encoding_model.features.children())[:-2]
     # 只训练conv5_1, conv5_2, and conv5_3的参数，冻结前面所有曾的参数
     for layer in layers[:-5]:
         for p in layer.parameters():

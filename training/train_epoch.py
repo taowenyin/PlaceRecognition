@@ -72,12 +72,15 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
 
             # 获取Query的B、C、H、W
             B, C, H, W = query.shape
+            # 获取Negatives的(B, negative_size, C, H, W)
+            N_B, N_S, N_C, N_H, N_W = negatives.shape
+
             # 计算所有Query对应的反例数量和
-            neg_size = torch.sum(neg_counts)
-            # todo 合并
-            query = query.unsqueeze(1)
-            positives = positives.unsqueeze(1)
-            # 把Query、Positives和Negatives进行拼接，合并成一个Tensor
+            neg_size = torch.sum(neg_counts).numpy()
+            # Query和Positives的形状都为(B, C, H, W)，但是Negatives的形状为(B, negative_size, C, H, W)，
+            # 因此为了使Query和Positives与Negatives的形状保持统一，需要变换Negatives的维度
+            negatives = negatives.view(-1, N_C, N_H, N_W)
+            # 把Query、Positives和Negatives在第一个维度进行拼接，合并成一个Tensor
             data_input = torch.cat([query, positives, negatives])
             # 把数据放到GPU中
             data_input = data_input.to(device)
@@ -87,18 +90,48 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
             # 经过池化后的数据
             pooling_data = model.pool(data_encoding)
 
+            patch_loss = 0
+            if config['train']['pooling'].lower() == 'patchnetvlad':
+                # todo Patch还没处理
+                # =======================================
+                # 计算Patch VLAD特征的损失
+                # =======================================
+                patch_poolings = pooling_data[0]
+                # 读取每个Patch Pooling
+                for i in range(len(patch_poolings)):
+                    patch_pooling = patch_poolings[i]
+                    patch_pooling_q, patch_pooling_p, patch_pooling_n = torch.split(patch_pooling, [B, B, neg_size])
+                    for i, neg_count in enumerate(neg_counts):
+                        for n in range(neg_count):
+                            neg_ix = (torch.sum(neg_counts[:i]) + n).item()
+                            loss = criterion(patch_pooling_q[i: i + 1],
+                                             patch_pooling_p[i: i + 1],
+                                             patch_pooling_n[neg_ix:neg_ix + 1])
+                            patch_loss += loss
+                    print('xxx')
+
+                global_pooling = pooling_data[1]
+            else:
+                global_pooling = pooling_data
+
+            # =======================================
+            # 计算Global VLAD特征的损失
+            # =======================================
             # 把Pooling的数据分为Query、正例和负例
-            pooling_q, pooling_p, pooling_n = torch.split(pooling_data, [B, B, neg_size])
+            global_pooling_q, global_pooling_p, global_pooling_n = torch.split(global_pooling, [B, B, neg_size])
 
             optimizer.zero_grad()
 
             # 对每个Query、Positive、Negative组成的三元对象进行Loss计算，由于每个Query对应的Negative数量不同，所以需要这样计算
-            loss = 0
+            global_loss = 0
             for i, neg_count in enumerate(neg_counts):
                 for n in range(neg_count):
                     neg_ix = (torch.sum(neg_counts[:i]) + n).item()
-                    loss += criterion(pooling_q[i: i + 1], pooling_p[i: i + 1], pooling_n[neg_ix:neg_ix + 1])
+                    global_loss += criterion(global_pooling_q[i: i + 1],
+                                             global_pooling_p[i: i + 1],
+                                             global_pooling_n[neg_ix:neg_ix + 1])
 
+            # todo 还没写完
             # 对损失求平均
             loss /= neg_size.float().to(device)
 

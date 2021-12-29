@@ -3,9 +3,12 @@ import torch
 import math
 
 if __name__ == '__main__':
-    a = 21
-    b = 4
+    a = np.random.rand(2, 2, 3, 2, 2)
 
-    c = math.ceil(a / 4)
+    b = a.reshape((-1, 3, 2, 2))
 
-    print('xxx')
+    print(a)
+    print('a shape = {}'.format(a.shape))
+    print('========================')
+    print(b)
+    print('b shape = {}'.format(b.shape))

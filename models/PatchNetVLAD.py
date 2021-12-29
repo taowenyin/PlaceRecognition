@@ -144,7 +144,9 @@ class PatchNetVLAD(nn.Module):
             vlad = vlad.view(B, self.__num_clusters, C, -1)
             # intra-normalization
             vlad = F.normalize(vlad, p=2, dim=2)
+            # todo 根据损失函数定义VLAD的形状应该（B, D）
             vlad = vlad.view(x.size(0), -1, vlad.size(3))
+            # vlad = vlad.view(x.size(0), -1, vlad.size(3))
             # L2 normalize
             vlad = F.normalize(vlad, p=2, dim=1)
             vlad_local.append(vlad)
