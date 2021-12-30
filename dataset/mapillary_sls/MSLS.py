@@ -735,6 +735,8 @@ class MSLS(Dataset):
         # 子数据集调用次数+1
         self.__current_subset += 1
 
+    print('===> 数据集建立完毕...')
+
 
 if __name__ == '__main__':
     from models.models_generic import get_backbone, get_model

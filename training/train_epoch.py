@@ -16,7 +16,8 @@ from os.path import join
 from tools import ROOT_DIR
 
 
-def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encoding_dim, device, opt, config: ConfigParser):
+def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encoding_dim,
+                device, epoch_num: int, opt, config: ConfigParser):
     """
     一次训练的过程
 
@@ -26,6 +27,7 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
     :param criterion: 训练的损失函数
     :param encoding_dim: Backbone模型的输出维度
     :param device: 训练使用的设备
+    :param epoch_num: 第几个周期
     :param opt: 传入的参数
     :param config: 训练的配置参数
     """
@@ -51,10 +53,12 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
             '第{}/{}批Query数据'.format(sub_cached_q_iter, train_dataset.cached_subset_size))
 
         if config['train']['pooling'].lower() == 'netvlad' or config['train']['pooling'].lower() == 'patchnetvlad':
-            encoding_dim *= config[dataset_name].getint('num_clusters')
+            pooling_dim = encoding_dim * config[dataset_name].getint('num_clusters')
+        else:
+            pooling_dim = encoding_dim
 
         # 刷新数据
-        train_dataset.refresh_data(model, encoding_dim)
+        train_dataset.refresh_data(model, pooling_dim)
 
         # 训练数据集的载入器
         training_data_loader = DataLoader(dataset=train_dataset, batch_size=config['train'].getint('batch_size'),
@@ -76,7 +80,7 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
             N_B, N_S, N_C, N_H, N_W = negatives.shape
 
             # 计算所有Query对应的反例数量和
-            neg_size = torch.sum(neg_counts).numpy()
+            neg_size = torch.sum(neg_counts)
             # Query和Positives的形状都为(B, C, H, W)，但是Negatives的形状为(B, negative_size, C, H, W)，
             # 因此为了使Query和Positives与Negatives的形状保持统一，需要变换Negatives的维度
             negatives = negatives.view(-1, N_C, N_H, N_W)
@@ -90,6 +94,9 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
             # 经过池化后的数据
             pooling_data = model.pool(data_encoding)
 
+            optimizer.zero_grad()
+
+            total_loss = 0
             patch_loss = 0
             if config['train']['pooling'].lower() == 'patchnetvlad':
                 # todo Patch还没处理
@@ -101,14 +108,22 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
                 for i in range(len(patch_poolings)):
                     patch_pooling = patch_poolings[i]
                     patch_pooling_q, patch_pooling_p, patch_pooling_n = torch.split(patch_pooling, [B, B, neg_size])
+                    loss_i = 0
                     for i, neg_count in enumerate(neg_counts):
                         for n in range(neg_count):
                             neg_ix = (torch.sum(neg_counts[:i]) + n).item()
                             loss = criterion(patch_pooling_q[i: i + 1],
                                              patch_pooling_p[i: i + 1],
                                              patch_pooling_n[neg_ix:neg_ix + 1])
-                            patch_loss += loss
-                    print('xxx')
+                            loss_i += loss
+                    # 计算每个Patch的平均Loss
+                    patch_loss += (loss_i / neg_size)
+
+                # 计算所有Patch Size的平均Loss
+                patch_loss = (patch_loss / len(patch_poolings))
+
+                # 清空内存
+                del patch_pooling_q, patch_pooling_p, patch_pooling_n
 
                 global_pooling = pooling_data[1]
             else:
@@ -117,13 +132,12 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
             # =======================================
             # 计算Global VLAD特征的损失
             # =======================================
+            # 对每个Query、Positive、Negative组成的三元对象进行Loss计算，由于每个Query对应的Negative数量不同，所以需要这样计算
+            global_loss = 0
+
             # 把Pooling的数据分为Query、正例和负例
             global_pooling_q, global_pooling_p, global_pooling_n = torch.split(global_pooling, [B, B, neg_size])
 
-            optimizer.zero_grad()
-
-            # 对每个Query、Positive、Negative组成的三元对象进行Loss计算，由于每个Query对应的Negative数量不同，所以需要这样计算
-            global_loss = 0
             for i, neg_count in enumerate(neg_counts):
                 for n in range(neg_count):
                     neg_ix = (torch.sum(neg_counts[:i]) + n).item()
@@ -131,32 +145,36 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
                                              global_pooling_p[i: i + 1],
                                              global_pooling_n[neg_ix:neg_ix + 1])
 
-            # todo 还没写完
             # 对损失求平均
-            loss /= neg_size.float().to(device)
+            global_loss = (global_loss /  neg_size)
 
-            loss.backward()
+            if config['train']['pooling'].lower() == 'patchnetvlad':
+                total_loss = global_loss + patch_loss
+            else:
+                total_loss = global_loss
+
+            total_loss.backward()
             optimizer.step()
-            del data_input, data_encoding, pooling_data, pooling_q, pooling_p, pooling_n
+            del data_input, data_encoding, pooling_data, global_pooling_q, global_pooling_p, global_pooling_n
             del query, positives, negatives
 
-            batch_loss = loss.item()
+            batch_loss = total_loss.item()
             epoch_loss += batch_loss
 
             if iteration % 50 == 0 or batch_count <= 10:
-                # todo 记录损失
-                print('xxx')
+                print("==> 训练周期[{}]({}/{}): Loss: {:.4f}".format(epoch_num, iteration, batch_count, batch_loss))
+
+        training_data_bar.set_description('')
 
         start_iter += len(training_data_loader)
-        del training_data_loader, loss
+        del training_data_loader, total_loss
         optimizer.zero_grad()
         torch.cuda.empty_cache()
 
     # 计算平均损失
     avg_loss = epoch_loss / batch_count
 
-    # todo 记录损失
-    print('xxx')
+    print("===> 第 {} 个周期完成，平均损失: {:.4f}".format(epoch_num, avg_loss))
 
 
 if __name__ == '__main__':
@@ -220,4 +238,4 @@ if __name__ == '__main__':
                                      p=2, reduction='sum').to(device)
 
     model = model.to(device)
-    train_epoch(train_dataset, model, optimizer, criterion, encoding_dim, device, opt, config)
+    train_epoch(train_dataset, model, optimizer, criterion, encoding_dim, device, 0, opt, config)
