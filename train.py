@@ -20,6 +20,7 @@ from training.train_epoch import train_epoch
 from model_validation.validation import validation
 from datetime import datetime
 from tools.common import save_checkpoint
+from tensorboardX import SummaryWriter
 
 
 if __name__ == '__main__':
@@ -181,10 +182,15 @@ if __name__ == '__main__':
         makedirs(opt.resume_dir)
 
     # 保存可视化结果的路径
-    opt.result_dir = join(ROOT_DIR, 'result', config['model'].get('backbone'), dataset_name,
-                          config[dataset_name].get('num_clusters'), datetime.now().strftime('%Y_%m_%d_%H-%M-%S'))
+    opt.result_dir = join(ROOT_DIR, 'result',
+                          '{}_{}_{}'.format(config['model'].get('backbone'), dataset_name,
+                                            config[dataset_name].get('num_clusters')),
+                          datetime.now().strftime('%Y_%m_%d'))
     if not exists(opt.result_dir):
         makedirs(opt.result_dir)
+
+    # 创建TensorBoard的写入对象
+    writer = SummaryWriter(log_dir=join(opt.result_dir, datetime.now().strftime('%H:%M:%S')))
 
     # 保存训练结果没有改善的次数
     not_improved = 0
@@ -201,7 +207,7 @@ if __name__ == '__main__':
         train_epoch_bar.set_description('第{}/{}次训练周期'.format(epoch, opt.epochs_count + 1 - opt.start_epoch + 1))
 
         # 执行一个训练周期
-        train_epoch(train_dataset, model, optimizer, criterion, encoding_dim, device, opt, config)
+        train_epoch(train_dataset, model, optimizer, criterion, encoding_dim, device, epoch, opt, config, writer)
 
         # 每训练eval_every次，进行一次验证
         if(epoch % config['train'].getint('eval_every')) == 0:
@@ -233,6 +239,7 @@ if __name__ == '__main__':
 
     # 显示最好的结果
     print('===> 最好的结果 Recalls@5: {:.4f}'.format(best_score), flush=True)
+    writer.close()
 
     # 清空CUDA缓存
     torch.cuda.empty_cache()

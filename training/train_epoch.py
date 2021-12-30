@@ -14,10 +14,11 @@ from torch.nn import Module
 from tqdm import tqdm
 from os.path import join
 from tools import ROOT_DIR
+from tensorboardX import SummaryWriter
 
 
 def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encoding_dim,
-                device, epoch_num: int, opt, config: ConfigParser):
+                device, epoch_num: int, opt, config: ConfigParser, writer: SummaryWriter):
     """
     一次训练的过程
 
@@ -30,6 +31,7 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
     :param epoch_num: 第几个周期
     :param opt: 传入的参数
     :param config: 训练的配置参数
+    :param writer: Tensorboard的写入对象
     """
 
     train_dataset.new_epoch()
@@ -96,10 +98,8 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
 
             optimizer.zero_grad()
 
-            total_loss = 0
             patch_loss = 0
             if config['train']['pooling'].lower() == 'patchnetvlad':
-                # todo Patch还没处理
                 # =======================================
                 # 计算Patch VLAD特征的损失
                 # =======================================
