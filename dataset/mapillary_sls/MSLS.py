@@ -126,7 +126,7 @@ class MSLS(Dataset):
         self.__cached_subset_idx = []
 
         # 所有Query对应的正例索引
-        self.all_positive_indices = []
+        self.__all_positive_indices = []
         # 每批cached_queries个数据，提供有多少批数据
         self.__cached_subset_size = 0
 
@@ -230,7 +230,7 @@ class MSLS(Dataset):
                 # 在Database中找到符合positive_distance_threshold要求的Query数据的最近邻数据的索引
                 positive_distance, positive_indices = neigh.radius_neighbors(utm_q, self.__positive_distance_threshold)
                 # 保存所有正例索引
-                self.all_positive_indices.extend(positive_indices)
+                self.__all_positive_indices.extend(positive_indices)
 
                 # 训练模式下，获取负例索引
                 if self.__mode == 'train':
@@ -474,7 +474,7 @@ class MSLS(Dataset):
         return keys, np.asarray(idxs)
 
     @staticmethod
-    def input_transform(resize):
+    def input_transform(resize=(480, 640)):
         """
         对图像进行转换
 
@@ -531,6 +531,18 @@ class MSLS(Dataset):
     @property
     def cached_subset_size(self):
         return self.__cached_subset_size
+
+    @property
+    def q_images_key(self):
+        return self.__q_images_key
+
+    @property
+    def img_transform(self):
+        return self.__img_transform
+
+    @property
+    def all_positive_indices(self):
+        return self.__all_positive_indices
 
     def new_epoch(self):
         """

@@ -12,9 +12,11 @@ from tqdm import trange
 from torch.utils.data import DataLoader
 from torch.nn import Module
 from tqdm import tqdm
-from os.path import join
+from os.path import join, exists
+from os import makedirs
 from tools import ROOT_DIR
 from tensorboardX import SummaryWriter
+from datetime import datetime
 
 
 def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encoding_dim,
@@ -163,6 +165,8 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
 
             if iteration % 50 == 0 or batch_count <= 10:
                 print("==> 训练周期[{}]({}/{}): Loss: {:.4f}".format(epoch_num, iteration, batch_count, batch_loss))
+                writer.add_scalar('训练损失', batch_loss, ((epoch_num - 1) * batch_count) + iteration)
+                writer.add_scalar('训练的负例数', neg_size, ((epoch_num - 1) * batch_count) + iteration)
 
         training_data_bar.set_description('')
 
@@ -175,6 +179,7 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
     avg_loss = epoch_loss / batch_count
 
     print("===> 第 {} 个周期完成，平均损失: {:.4f}".format(epoch_num, avg_loss))
+    writer.add_scalar('训练的平均损失', avg_loss, epoch_num)
 
 
 if __name__ == '__main__':
@@ -221,6 +226,17 @@ if __name__ == '__main__':
 
         del image_clusters, image_descriptors
 
+    # 保存可视化结果的路径
+    opt.result_dir = join(ROOT_DIR, 'result',
+                          '{}_{}_{}'.format(config['model'].get('backbone'), dataset_name,
+                                            config[dataset_name].get('num_clusters')),
+                          datetime.now().strftime('%Y_%m_%d'))
+    if not exists(opt.result_dir):
+        makedirs(opt.result_dir)
+
+    # 创建TensorBoard的写入对象
+    writer = SummaryWriter(log_dir=join(opt.result_dir, datetime.now().strftime('%H:%M:%S')))
+
     train_dataset = MSLS(opt.dataset_root_dir,
                          mode='train',
                          device=device,
@@ -238,4 +254,4 @@ if __name__ == '__main__':
                                      p=2, reduction='sum').to(device)
 
     model = model.to(device)
-    train_epoch(train_dataset, model, optimizer, criterion, encoding_dim, device, 0, opt, config)
+    train_epoch(train_dataset, model, optimizer, criterion, encoding_dim, device, 0, opt, config, writer)

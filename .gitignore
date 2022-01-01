@@ -1,4 +1,5 @@
 .idea
 *.hdf5
 tmp/*
+result/*
 !.hidden

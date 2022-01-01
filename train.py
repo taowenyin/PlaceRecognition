@@ -211,7 +211,7 @@ if __name__ == '__main__':
 
         # 每训练eval_every次，进行一次验证
         if(epoch % config['train'].getint('eval_every')) == 0:
-            recalls = validation(validation_dataset, model, encoding_dim, device, opt, config, epoch)
+            recalls = validation(validation_dataset, model, encoding_dim, device, opt, config, epoch, writer)
 
             # 如果在验证集上结果大于保存的结果，那么就把not_improved清零，并且保存当前最好结果，否not_improved加1
             is_best = recalls[5] > best_score
