@@ -67,7 +67,7 @@ def validation(validation_dataset: MSLS, model: Module, encoding_dim, device,
                 vlad_descriptors = vlad_descriptors[1]
             q_feature[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
 
-        # 获取验证集Query的VLAD特征
+        # 获取验证集Database的VLAD特征
         eval_db_data_bar = tqdm(enumerate(eval_data_loader_dbs), leave=True, total=len(eval_set_dbs) // batch_size)
         for i, (data, idx) in eval_db_data_bar:
             eval_db_data_bar.set_description('[{}/{}]计算验证集Database的特征...'.format(i, eval_db_data_bar.total))
@@ -95,14 +95,17 @@ def validation(validation_dataset: MSLS, model: Module, encoding_dim, device,
     # 得到所有正例
     gt = validation_dataset.all_positive_indices
 
+    # 保存不同N的正确率
     correct_at_n = np.zeros(len(n_values))
 
     for q_idx, pred in enumerate(predictions):
         for i, n in enumerate(n_values):
+            # 只要在gt中存在pred预测的索引，那么correct_at_n就增加1
             if np.any(np.in1d(pred[:n], gt[q_idx])):
                 correct_at_n[i:] += 1
                 break
 
+    # 计算召回率
     recall_at_n = correct_at_n / len(validation_dataset.q_seq_idx)
 
     # 保存所有召回率
