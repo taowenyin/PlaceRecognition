@@ -102,9 +102,6 @@ if __name__ == '__main__':
         if opt.cluster_file:
             opt.cluster_file = join(join(ROOT_DIR, 'desired', 'centroids'), opt.cluster_file)
 
-            print('cluster_file = {}'.format(opt.cluster_file))
-            print('init_cache_file = {}'.format(init_cache_file))
-
             if isfile(opt.cluster_file):
                 if opt.cluster_file != init_cache_file:
                     copyfile(opt.cluster_file, init_cache_file)
