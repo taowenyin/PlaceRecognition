@@ -48,10 +48,10 @@ class ImagesFromList(Dataset):
 
 
 class MSLS(Dataset):
-    def __init__(self, root_dir, device, config, mode='train', cities_list=None, img_resize=(480, 640), negative_size=5,
-                 positive_distance_threshold=10, negative_distance_threshold=25, cached_queries=1000,
-                 cached_negatives=1000, batch_size=24, task='im2im', sub_task='all', seq_length=1,
-                 exclude_panos=True, positive_sampling=True):
+    def __init__(self, root_dir, device, config, mode='train', cities_list=None, img_resize=(480, 640),
+                 negative_size=5, positive_distance_threshold=10, negative_distance_threshold=25,
+                 cached_queries=1000, cached_negatives=1000, batch_size=24, task='im2im', sub_task='all',
+                 seq_length=1, exclude_panos=True, positive_sampling=True):
         """
         Mapillary Street-level Sequences数据集的读取
 
@@ -801,7 +801,7 @@ if __name__ == '__main__':
                          cities_list='trondheim',
                          img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                          negative_size=config['train'].getint('negative_size'),
-                         batch_size=config['train'].getint('batch_size'),
+                         batch_size=config['train'].getint('cache_batch_size'),
                          exclude_panos=config['train'].getboolean('exclude_panos'))
 
     train_dataset.new_epoch()

@@ -244,7 +244,7 @@ if __name__ == '__main__':
                          cities_list='trondheim',
                          img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                          negative_size=config['train'].getint('negative_size'),
-                         batch_size=config['train'].getint('batch_size'),
+                         batch_size=config['train'].getint('cache_batch_size'),
                          exclude_panos=config['train'].getboolean('exclude_panos'))
 
     optimizer = optim.Adam(filter(lambda par: par.requires_grad, model.parameters()),

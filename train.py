@@ -116,7 +116,7 @@ if __name__ == '__main__':
             print('===> 载入聚类数据集')
             train_dataset = MSLS(opt.dataset_root_dir, device=device, config=config, mode='test', cities_list='train',
                                  img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
-                                 batch_size=config['train'].getint('batch_size'))
+                                 batch_size=config['train'].getint('cache_batch_size'))
 
             print('===> 聚类数据集中的数据数量为: {}'.format(len(train_dataset.db_images_key)))
 
@@ -161,13 +161,13 @@ if __name__ == '__main__':
     train_dataset = MSLS(opt.dataset_root_dir, mode='train', device=device, config=config, cities_list='trondheim',
                          img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                          negative_size=config['train'].getint('negative_size'),
-                         batch_size=config['train'].getint('batch_size'),
+                         batch_size=config['train'].getint('cache_batch_size'),
                          exclude_panos=config['train'].getboolean('exclude_panos'))
 
     validation_dataset = MSLS(opt.dataset_root_dir, mode='val', device=device, config=config, cities_list='cph',
                               img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                               positive_distance_threshold=config['train'].getint('positive_distance_threshold'),
-                              batch_size=config['train'].getint('batch_size'),
+                              batch_size=config['train'].getint('cache_batch_size'),
                               exclude_panos=config['train'].getboolean('exclude_panos'))
 
     print('===> 训练集中Query的数量为: {}'.format(len(train_dataset.q_seq_idx)))

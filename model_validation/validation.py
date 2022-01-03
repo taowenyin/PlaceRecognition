@@ -35,12 +35,14 @@ def validation(validation_dataset: MSLS, model: Module, encoding_dim, device,
     eval_set_queries = ImagesFromList(validation_dataset.q_images_key, validation_dataset.img_transform)
     eval_set_dbs = ImagesFromList(validation_dataset.db_images_key, transform=validation_dataset.img_transform)
 
-    eval_data_loader_queries = DataLoader(dataset=eval_set_queries, batch_size=config['train'].getint('batch_size'))
-    eval_data_loader_dbs = DataLoader(dataset=eval_set_dbs, batch_size=config['train'].getint('batch_size'))
+    eval_data_loader_queries = DataLoader(dataset=eval_set_queries,
+                                          batch_size=config['train'].getint('cache_batch_size'))
+    eval_data_loader_dbs = DataLoader(dataset=eval_set_dbs,
+                                      batch_size=config['train'].getint('cache_batch_size'))
 
     # 获得数据集名称
     dataset_name = config['dataset'].get('name')
-    batch_size = config['train'].getint('batch_size')
+    cache_batch_size = config['train'].getint('cache_batch_size')
 
     model.eval()
 
@@ -57,7 +59,7 @@ def validation(validation_dataset: MSLS, model: Module, encoding_dim, device,
 
         # 获取验证集Query的VLAD特征
         eval_q_data_bar = tqdm(enumerate(eval_data_loader_queries),
-                               leave=True, total=len(eval_set_queries) // batch_size)
+                               leave=True, total=len(eval_set_queries) // cache_batch_size)
         for i, (data, idx) in eval_q_data_bar:
             eval_q_data_bar.set_description('[{}/{}]计算验证集Query的特征...'.format(i, eval_q_data_bar.total))
             image_descriptors = model.encoder(data.to(device))
@@ -65,10 +67,11 @@ def validation(validation_dataset: MSLS, model: Module, encoding_dim, device,
             # 如果是PatchNetVLAD那么只是用Global VLAD
             if config['train'].get('pooling') == 'patchnetvlad':
                 vlad_descriptors = vlad_descriptors[1]
-            q_feature[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
+            q_feature[i * cache_batch_size: (i + 1) * cache_batch_size, :] = vlad_descriptors
 
         # 获取验证集Database的VLAD特征
-        eval_db_data_bar = tqdm(enumerate(eval_data_loader_dbs), leave=True, total=len(eval_set_dbs) // batch_size)
+        eval_db_data_bar = tqdm(enumerate(eval_data_loader_dbs),
+                                leave=True, total=len(eval_set_dbs) // cache_batch_size)
         for i, (data, idx) in eval_db_data_bar:
             eval_db_data_bar.set_description('[{}/{}]计算验证集Database的特征...'.format(i, eval_db_data_bar.total))
             image_descriptors = model.encoder(data.to(device))
@@ -76,7 +79,7 @@ def validation(validation_dataset: MSLS, model: Module, encoding_dim, device,
             # 如果是PatchNetVLAD那么只是用Global VLAD
             if config['train'].get('pooling') == 'patchnetvlad':
                 vlad_descriptors = vlad_descriptors[1]
-            db_feature[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
+            db_feature[i * cache_batch_size: (i + 1) * cache_batch_size, :] = vlad_descriptors
 
     del eval_data_loader_queries, eval_data_loader_dbs
 
@@ -176,7 +179,7 @@ if __name__ == '__main__':
     validation_dataset = MSLS(opt.dataset_root_dir, mode='val', device=device, config=config, cities_list='cph',
                               img_resize=tuple(map(int, str.split(config['train'].get('resize'), ','))),
                               positive_distance_threshold=config['train'].getint('positive_distance_threshold'),
-                              batch_size=config['train'].getint('batch_size'),
+                              batch_size=config['train'].getint('cache_batch_size'),
                               exclude_panos=config['train'].getboolean('exclude_panos'))
 
     model = model.to(device)

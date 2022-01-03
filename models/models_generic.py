@@ -144,7 +144,7 @@ def create_image_clusters(cluster_set, model, encoding_dim, device, config, save
     # 创建聚类数据集载入器
     cluster_data_loader = DataLoader(dataset=ImagesFromList(cluster_set.db_images_key,
                                                             transform=MSLS.input_transform(resize)),
-                                     batch_size=config['train'].getint('batch_size'), shuffle=False,
+                                     batch_size=config['train'].getint('cache_batch_size'), shuffle=False,
                                      sampler=cluster_sampler)
 
     # 创建保存中心点的文件
@@ -158,7 +158,7 @@ def create_image_clusters(cluster_set, model, encoding_dim, device, config, save
     with h5py.File(save_file, mode='w') as h5_file:
         with torch.no_grad():
             model.eval()
-            print('===> Extracting Descriptors')
+            print('===> 提取图像特征')
 
             # 在H5文件中创建图像描述
             db_feature = h5_file.create_dataset("descriptors", [descriptors_size, encoding_dim], dtype=np.float32)
@@ -173,7 +173,7 @@ def create_image_clusters(cluster_set, model, encoding_dim, device, config, save
                 image_descriptors = F.normalize(image_descriptors, p=2, dim=2)
 
                 # 每个图像per_image_sample_count个特征，一共有batch_size个图像，计算有多少个特征作为索引偏移
-                batch_index = (iteration - 1) * config['train'].getint('batch_size') * per_image_sample_count
+                batch_index = (iteration - 1) * config['train'].getint('cache_batch_size') * per_image_sample_count
                 for ix in range(image_descriptors.size(0)):
                     # 对Batch中的每个图像进行随机位置的采样
                     sample = np.random.choice(image_descriptors.size(1), per_image_sample_count, False)
