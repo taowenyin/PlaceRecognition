@@ -69,6 +69,9 @@ def validation(validation_dataset: MSLS, model: Module, encoding_dim, device,
                 vlad_descriptors = vlad_descriptors[1]
             q_feature[i * cache_batch_size: (i + 1) * cache_batch_size, :] = vlad_descriptors
 
+            # 清空GPU存储
+            del data, image_descriptors, vlad_descriptors
+
         # 获取验证集Database的VLAD特征
         eval_db_data_bar = tqdm(enumerate(eval_data_loader_dbs),
                                 leave=True, total=len(eval_set_dbs) // cache_batch_size)
@@ -81,7 +84,12 @@ def validation(validation_dataset: MSLS, model: Module, encoding_dim, device,
                 vlad_descriptors = vlad_descriptors[1]
             db_feature[i * cache_batch_size: (i + 1) * cache_batch_size, :] = vlad_descriptors
 
-    del eval_data_loader_queries, eval_data_loader_dbs
+            # 清空GPU存储
+            del data, image_descriptors, vlad_descriptors
+
+        del eval_data_loader_queries, eval_data_loader_dbs
+        # 回收GPU内存
+        torch.cuda.empty_cache()
 
     print('===> 构建验证集的最近邻')
 

@@ -186,8 +186,8 @@ def create_image_clusters(cluster_set, model, encoding_dim, device, config, save
                 # 清空内存
                 del input_data, image_descriptors
 
-                if iteration == 125:
-                    pass
+            # 回收GPU内存
+            torch.cuda.empty_cache()
 
         print('====> 开始进行聚类..')
         # 定义聚类方法KMeans

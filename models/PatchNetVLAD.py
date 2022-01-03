@@ -81,6 +81,9 @@ class PatchNetVLAD(nn.Module):
             self.__conv.weight = nn.Parameter((2.0 * self.__alpha * self.__centroids).unsqueeze(-1).unsqueeze(-1))
             self.__conv.bias = nn.Parameter(-1 * self.__alpha * self.__centroids.norm(dim=1))
 
+            # 清空GPU
+            torch.cuda.empty_cache()
+
     def forward(self, x):
         B, C, H, W = x.shape
 

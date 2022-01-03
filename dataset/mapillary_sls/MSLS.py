@@ -663,6 +663,11 @@ class MSLS(Dataset):
                     vlad_descriptors = vlad_descriptors[1]
                 q_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
 
+                # 清空GPU存储
+                del data, image_descriptors, vlad_descriptors
+
+            del q_loader
+
             # 获取Positive的VLAD特征
             p_data_bar = tqdm(enumerate(p_loader), total=len(p_idxs) // batch_size, leave=True)
             for i, (data, idx) in p_data_bar:
@@ -674,6 +679,11 @@ class MSLS(Dataset):
                     vlad_descriptors = vlad_descriptors[1]
                 p_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
 
+                # 清空GPU存储
+                del data, image_descriptors, vlad_descriptors
+
+            del p_loader
+
             # 获取Negative的VLAD特征
             n_data_bar = tqdm(enumerate(n_loader), total=len(n_idxs) // batch_size, leave=True)
             for i, (data, idx) in n_data_bar:
@@ -684,6 +694,14 @@ class MSLS(Dataset):
                 if self.__config['train'].get('pooling') == 'patchnetvlad':
                     vlad_descriptors = vlad_descriptors[1]
                 n_vectors[i * batch_size: (i + 1) * batch_size, :] = vlad_descriptors
+
+                # 清空GPU存储
+                del data, image_descriptors, vlad_descriptors
+
+            del n_loader
+
+            # 回收GPU内存
+            torch.cuda.empty_cache()
 
         print('===> VLAD特征计算完成，搜索负例中...')
 
