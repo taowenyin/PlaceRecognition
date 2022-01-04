@@ -173,6 +173,7 @@ def train_epoch(train_dataset: MSLS, model: Module, optimizer, criterion, encodi
         start_iter += len(training_data_loader)
         del training_data_loader, total_loss
         optimizer.zero_grad()
+        # 回头GPU内存
         torch.cuda.empty_cache()
 
     # 计算平均损失

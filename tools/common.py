@@ -1,8 +1,9 @@
 import torch
 import shutil
 
-from os.path import join
+from os.path import join, isfile, exists
 from datetime import datetime
+from os import makedirs
 
 
 def save_checkpoint(state, opt, is_best_sofar, filename='checkpoint.pth.tar'):
@@ -15,13 +16,16 @@ def save_checkpoint(state, opt, is_best_sofar, filename='checkpoint.pth.tar'):
     :param filename: 保存的文件名
     """
 
+    save_path = join(opt.save_checkpoint_path, datetime.now().strftime('%Y_%m_%d'))
+    # 文件夹不存在则创建文件夹
+    if not exists(save_path):
+        makedirs(save_path)
+
     # 设置模型保存的路径
     if opt.save_every_epoch:
-        model_out_path = join(opt.save_checkpoint_path,
-                              datetime.now().strftime('%Y_%m_%d'),
-                              'checkpoint_epoch' + str(state['epoch']) + '.pth.tar')
+        model_out_path = join(save_path, 'checkpoint_epoch' + str(state['epoch']) + '.pth.tar')
     else:
-        model_out_path = join(opt.save_checkpoint_path, datetime.now().strftime('%Y_%m_%d'), filename)
+        model_out_path = join(save_path, filename)
 
     # 保存模型
     torch.save(state, model_out_path)

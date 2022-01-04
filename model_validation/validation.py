@@ -103,6 +103,8 @@ def validation(validation_dataset: MSLS, model: Module, encoding_dim, device,
     # 计算最近邻
     predictions = np.square(knn.kneighbors(q_feature.cpu().numpy(), max(n_values))[1])
 
+    del knn
+
     # 得到所有正例
     gt = validation_dataset.all_positive_indices
 

@@ -137,6 +137,9 @@ if __name__ == '__main__':
 
             del image_clusters, image_descriptors
 
+            # 回头GPU内存
+            torch.cuda.empty_cache()
+
     if config['train'].get('optim') == 'ADAM':
         optimizer = optim.Adam(filter(lambda par: par.requires_grad, model.parameters()),
                                lr=config['train'].getfloat('lr'))
