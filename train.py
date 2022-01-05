@@ -185,12 +185,12 @@ if __name__ == '__main__':
     opt.result_dir = join(ROOT_DIR, 'result',
                           '{}_{}_{}'.format(config['model'].get('backbone'), dataset_name,
                                             config[dataset_name].get('num_clusters')),
-                          datetime.now().strftime('%Y_%m_%d'))
+                          datetime.now().strftime('%Y_%m_%d_%H:%M:%S'))
     if not exists(opt.result_dir):
         makedirs(opt.result_dir)
 
     # 创建TensorBoard的写入对象
-    writer = SummaryWriter(log_dir=join(opt.result_dir, datetime.now().strftime('%H:%M:%S')))
+    writer = SummaryWriter(log_dir=join(opt.result_dir, 'logs'))
 
     # 保存训练结果没有改善的次数
     not_improved = 0
