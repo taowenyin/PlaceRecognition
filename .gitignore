@@ -2,4 +2,5 @@
 *.hdf5
 tmp/*
 result/*
+pretrained_models/*
 !.hidden
