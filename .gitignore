@@ -3,4 +3,5 @@
 tmp/*
 result/*
 pretrained_models/*
+example_images/*
 !.hidden
