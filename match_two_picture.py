@@ -4,6 +4,8 @@ import torch
 import cv2
 import matplotlib.pyplot as plt
 
+from PIL import Image
+from dataset.mapillary_sls.MSLS import MSLS
 from tools import ROOT_DIR
 from os.path import join, isfile
 from models.models_generic import get_backbone, get_model
@@ -20,6 +22,40 @@ def match_image(model, device, config, image_1, image_2, result_save_path):
     :param image_2: 图片2
     :param result_save_path: 结果保存的地址
     """
+
+    pool_size = int(config['train']['num_pcas'])
+
+    model.eval()
+
+    input_transform = MSLS.input_transform(resize=tuple(map(int, str.split(config['train'].get('resize'), ','))))
+
+    image_1 = Image.fromarray(image_1)
+    image_2 = Image.fromarray(image_2)
+
+    image_1 = input_transform(image_1).unsqueeze(0)
+    image_2 = input_transform(image_2).unsqueeze(0)
+
+    input_data = torch.cat((image_1, image_2), dim=0).to(device)
+
+    print('====> 提取图像特征')
+    with torch.no_grad():
+        image_encoding = model.encoder(input_data)
+
+        # 得到VLAD的局部特征
+        vlad_local, _ = model.pool(image_encoding)
+
+        image_1_local_feature = []
+        image_2_local_feature = []
+
+        for this_iter, this_local in enumerate(vlad_local):
+            vlad = this_local.permute(2, 0, 1).reshape(-1, this_local.size(1))
+            pca_encoding = model.WPCA(vlad.unsqueeze(-1).unsqueeze(-1))
+            pca_encoding = pca_encoding.reshape(this_local.size(2), this_local.size(0), pool_size).permute(1, 2, 0)
+
+            image_1_local_feature.append(torch.transpose(pca_encoding[0, :, :], 0, 1))
+            image_2_local_feature.append(pca_encoding[1, :, :])
+
+            print('xxx')
 
 
     print('xxx')
@@ -81,7 +117,7 @@ if __name__ == '__main__':
     if query_img is None:
         raise FileNotFoundError(query_img_file + ' 不存在')
 
-    match_image(model, device, config, db_img_file, query_img_file, opt.plot_save_path)
+    match_image(model, device, config, db_img, query_img, opt.plot_save_path)
 
     torch.cuda.empty_cache()
 
