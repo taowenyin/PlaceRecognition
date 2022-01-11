@@ -3,12 +3,14 @@ import configparser
 import torch
 import cv2
 import matplotlib.pyplot as plt
+import numpy as np
 
 from PIL import Image
 from dataset.mapillary_sls.MSLS import MSLS
 from tools import ROOT_DIR
 from os.path import join, isfile
 from models.models_generic import get_backbone, get_model
+from tools.local_matcher import calc_keypoint_centers_from_patches
 
 
 def match_image(model, device, config, image_1, image_2, result_save_path):
@@ -55,14 +57,26 @@ def match_image(model, device, config, image_1, image_2, result_save_path):
             # （B x F, num_pcas）->(F, B, num_pcas)->(B, num_pcas, F)
             pca_encoding = pca_encoding.reshape(this_local.size(2), this_local.size(0), pool_size).permute(1, 2, 0)
 
-            a = pca_encoding[0, :, :]
-            b = torch.transpose(pca_encoding[0, :, :], 0, 1)
-
+            # 一个保存图像PCA后的转置数据，一个保存PCA数据
             image_1_local_feature.append(torch.transpose(pca_encoding[0, :, :], 0, 1))
             image_2_local_feature.append(pca_encoding[1, :, :])
 
-            print('xxx')
+        print('====> 计算关键点位置')
+        patch_sizes = [int(s) for s in config['train'].get('patch_sizes').split(",")]
+        strides = [int(s) for s in config['train'].get('strides').split(",")]
+        patch_weights = np.array(config['feature_match'].get('patch_weights_2_use').split(","), dtype=np.float)
 
+        # 保存所有的关键点
+        all_keypoints = []
+        # 保存关键点索引
+        all_indices = []
+
+        print('====> 匹配局部特征')
+        for patch_size, stride in zip(patch_sizes, strides):
+            # 获取关键点和索引
+            keypoints, indices = calc_keypoint_centers_from_patches(config, patch_size, patch_size, stride, stride)
+            all_keypoints.append(keypoints)
+            all_indices.append(indices)
 
     print('xxx')
 
