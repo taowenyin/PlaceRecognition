@@ -48,9 +48,15 @@ def match_image(model, device, config, image_1, image_2, result_save_path):
         image_2_local_feature = []
 
         for this_iter, this_local in enumerate(vlad_local):
+            # this_local -> vlad的Shape变化为(B, C, F) -> (F, B, C) -> (B x F, C)
             vlad = this_local.permute(2, 0, 1).reshape(-1, this_local.size(1))
+            # vlad再变化为(B x F, C, 1, ,1)送入WPCA，再经过Flatten变为（B x F, num_pcas）
             pca_encoding = model.WPCA(vlad.unsqueeze(-1).unsqueeze(-1))
+            # （B x F, num_pcas）->(F, B, num_pcas)->(B, num_pcas, F)
             pca_encoding = pca_encoding.reshape(this_local.size(2), this_local.size(0), pool_size).permute(1, 2, 0)
+
+            a = pca_encoding[0, :, :]
+            b = torch.transpose(pca_encoding[0, :, :], 0, 1)
 
             image_1_local_feature.append(torch.transpose(pca_encoding[0, :, :], 0, 1))
             image_2_local_feature.append(pca_encoding[1, :, :])
@@ -73,7 +79,7 @@ if __name__ == '__main__':
 
     configfile = join(opt.config_path, 'performance.ini')
     config = configparser.ConfigParser()
-    config.read(configfile)
+    config.read(configfile, encoding='utf-8')
 
     cuda = not opt.nocuda
     if cuda and not torch.cuda.is_available():
