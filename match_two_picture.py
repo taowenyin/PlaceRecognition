@@ -64,7 +64,7 @@ def match_image(model, device, config, image_1, image_2, result_save_path):
         print('====> 计算关键点位置')
         patch_sizes = [int(s) for s in config['train'].get('patch_sizes').split(",")]
         strides = [int(s) for s in config['train'].get('strides').split(",")]
-        patch_weights = np.array(config['feature_match'].get('patch_weights_2_use').split(","), dtype=np.float)
+        patch_weights = np.array(config['feature_match'].get('patch_weights_2_use').split(","), dtype=float)
 
         # 保存所有的关键点
         all_keypoints = []
