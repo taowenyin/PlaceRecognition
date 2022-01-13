@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import cv2
 
 
 class PatchMatch():
@@ -38,16 +39,35 @@ class PatchMatch():
             fw_inds = fw_inds.cpu().numpy()
             bw_inds = bw_inds.cpu().numpy()
 
+            # todo 获取至少4个点用于计算变换矩阵（不懂什么意思）
             mutuals = np.atleast_1d(np.argwhere(bw_inds[fw_inds] == np.arange(len(fw_inds))).squeeze())
 
-            print('xxx')
+            if len(mutuals) > 3:
+                # 获取关键点
+                index_keypoints = keypoint[:, mutuals]
+                query_keypoints = keypoint[:, fw_inds[mutuals]]
 
+                index_keypoints = np.transpose(index_keypoints)
+                query_keypoints = np.transpose(query_keypoints)
 
-        return None
+                # todo 找到对应的转换矩阵，由于采用VGG，因此使用[stride*1.5]计算（其实不懂）
+                _, mask = cv2.findHomography(index_keypoints, query_keypoints, cv2.FM_RANSAC,
+                                             ransacReprojThreshold=16 * stride * 1.5)
+
+                # todo 没太懂
+                inlier_index_keypoints = index_keypoints[mask.ravel() == 1]
+                all_inlier_query_keypoints.append(query_keypoints[mask.ravel() == 1])
+                inlier_count = inlier_index_keypoints.shape[0]
+                scores.append(-1 * inlier_count / q_feat.shape[0])
+                all_inlier_index_keypoints.append(inlier_index_keypoints)
+            else:
+                scores.append(0)
+
+        return scores, all_inlier_query_keypoints, all_inlier_index_keypoints
 
     def __match_with_spatial(self, q_features, db_features):
-        print('xxx')
-        return None
+        # todo 未完成
+        return None, None, None
 
     def __torch_nn(self, x, y):
         mul = torch.matmul(x, y)
@@ -55,15 +75,12 @@ class PatchMatch():
         dist = 2 - 2 * mul + 1e-9
         dist = torch.sqrt(dist)
 
-        _, fw_inds = torch.min(dist, 0)
-        bw_inds = torch.argmin(dist, 1)
+        _, fw_inds = torch.min(dist, dim=0)
+        bw_inds = torch.argmin(dist, dim=1)
 
         return fw_inds, bw_inds
 
 
 if __name__ == '__main__':
-
-
-    tools = PatchMatch('RANSAC', patch_size=[2,5,8], stride_size=[1,1,1])
 
     print('xxx')

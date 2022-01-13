@@ -33,6 +33,44 @@ def apply_patch_weights(input_scores, num_patches, patch_weights):
     return output_score
 
 
+def plot_match_image(cv_im_1, cv_im_2, inlier_keypoints_1, inlier_keypoints_2, result_save_path):
+    """
+    绘制匹配的结果图
+
+    :param cv_im_1: 匹配图1
+    :param cv_im_2: 匹配图2
+    :param inlier_keypoints_1: 图1的关键点
+    :param inlier_keypoints_2: 图2的关键点
+    :param result_save_path: 保存匹配结果图片的地址
+    :return:
+    """
+
+    kp_all1 = []
+    kp_all2 = []
+    matches_all = []
+    for this_inlier_keypoints_one, this_inlier_keypoints_two in zip(inlier_keypoints_1, inlier_keypoints_2):
+        for i in range(this_inlier_keypoints_one.shape[0]):
+            kp_all1.append(cv2.KeyPoint(this_inlier_keypoints_one[i, 0].astype(float),
+                                        this_inlier_keypoints_one[i, 1].astype(float), 1, -1, 0, 0, -1))
+            kp_all2.append(cv2.KeyPoint(this_inlier_keypoints_two[i, 0].astype(float),
+                                        this_inlier_keypoints_two[i, 1].astype(float), 1, -1, 0, 0, -1))
+            matches_all.append(cv2.DMatch(i, i, 0))
+
+    im_all_patch_matches = cv2.drawMatches(cv_im_1, kp_all1, cv_im_2, kp_all2,
+                                          matches_all, None, matchColor=(0, 255, 0), flags=2)
+    if result_save_path is None:
+        cv2.imshow('frame', im_all_patch_matches)
+    else:
+        im_all_patch_matches = cv2.cvtColor(im_all_patch_matches, cv2.COLOR_BGR2RGB)
+
+        plt.imshow(im_all_patch_matches)
+        # plt.show()
+        plt.axis('off')
+        filename = join(result_save_path, 'patch_matching.png')
+        plt.savefig(filename, dpi=300, bbox_inches='tight')
+        plt.close()
+
+
 def match_image(model, device, config, image_1, image_2, result_save_path):
     """
     对两张图片进行匹配
@@ -81,31 +119,40 @@ def match_image(model, device, config, image_1, image_2, result_save_path):
             image_1_local_feature.append(torch.transpose(pca_encoding[0, :, :], 0, 1))
             image_2_local_feature.append(pca_encoding[1, :, :])
 
-        print('====> 计算关键点位置')
-        patch_sizes = [int(s) for s in config['train'].get('patch_sizes').split(",")]
-        strides = [int(s) for s in config['train'].get('strides').split(",")]
-        patch_weights = np.array(config['feature_match'].get('patch_weights_2_use').split(","), dtype=float)
+    print('====> 计算关键点位置')
+    patch_sizes = [int(s) for s in config['train'].get('patch_sizes').split(",")]
+    strides = [int(s) for s in config['train'].get('strides').split(",")]
+    patch_weights = np.array(config['feature_match'].get('patch_weights_2_use').split(","), dtype=float)
+    resize = np.array(config['train'].get('resize').split(","), dtype=int)
 
-        # 保存所有的关键点
-        all_keypoints = []
-        # 保存关键点索引
-        all_indices = []
+    # 保存所有的关键点
+    all_keypoints = []
+    # 保存关键点索引
+    all_indices = []
 
-        print('====> 匹配局部特征')
-        for patch_size, stride in zip(patch_sizes, strides):
-            # 获取关键点和索引
-            keypoints, indices = calc_keypoint_centers_from_patches(config, patch_size, patch_size, stride, stride)
-            all_keypoints.append(keypoints)
-            all_indices.append(indices)
+    print('====> 匹配局部特征')
+    for patch_size, stride in zip(patch_sizes, strides):
+        # 获取关键点和索引
+        keypoints, indices = calc_keypoint_centers_from_patches(config, patch_size, patch_size, stride, stride)
+        all_keypoints.append(keypoints)
+        all_indices.append(indices)
 
-        matcher = PatchMatch(config['feature_match']['matcher'], patch_sizes, strides, all_keypoints, all_indices)
+    matcher = PatchMatch(config['feature_match']['matcher'], patch_sizes, strides, all_keypoints, all_indices)
 
-        scores, inlier_keypoints_1, inlier_keypoints_2 = matcher.match(image_1_local_feature, image_2_local_feature)
-        score = -1 * apply_patch_weights(scores, len(patch_sizes), patch_weights)
+    scores, inlier_keypoints_1, inlier_keypoints_2 = matcher.match(image_1_local_feature, image_2_local_feature)
+    score = -1 * apply_patch_weights(scores, len(patch_sizes), patch_weights)
 
-        print('两幅图像的相似度分数为: {.5f}。分数越高，则相似度越高。'.format(score))
+    print('两幅图像的相似度分数为: {.5f}。分数越高，则相似度越高。'.format(score))
 
-    print('xxx')
+    if config['feature_match']['matcher'] == 'RANSAC':
+        if result_save_path is not None:
+            print('保存局部特征匹配的图片到{}'.format(str(join(result_save_path, 'patch_matching.png'))))
+
+        cv_im_1 = cv2.resize(image_1, (resize[1], resize[0]))
+        cv_im_2 = cv2.resize(image_2, (resize[1], resize[0]))
+
+        # 保存匹配图
+        plot_match_image(cv_im_1, cv_im_2, inlier_keypoints_1, inlier_keypoints_2, result_save_path)
 
 
 if __name__ == '__main__':
