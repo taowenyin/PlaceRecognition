@@ -17,7 +17,7 @@ def calc_receptive_boxes(height, width):
     rf, stride, padding = [196.0, 16.0, 90.0]  # hardcoded for vgg-16 conv5_3
 
     # 根据高和宽形成网格，x，y的形状都为(height, width)
-    x, y = torch.meshgrid(torch.arange(0, height), torch.arange(0, width))
+    x, y = torch.meshgrid(torch.arange(0, height), torch.arange(0, width), indexing='ij')
     # x、y合并为(height, width, 2)，然后再reshape为(height x width, 2)
     coordinates = torch.reshape(torch.stack([y, x], dim=2), [-1, 2])
 
@@ -55,7 +55,7 @@ def calc_keypoint_centers_from_patches(config: ConfigParser, patch_size_h, patch
     Wout = int(((W + (2 * padding_size[1]) - patch_size[1]) / stride[1]) + 1)
 
     # 获取每个特征的感受野空间
-    rf_boxes = calc_receptive_boxes(Hout, Wout)
+    rf_boxes = calc_receptive_boxes(H, W)
 
     # 有多少个区域
     num_regions = Hout * Wout

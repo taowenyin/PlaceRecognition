@@ -11,6 +11,26 @@ from tools import ROOT_DIR
 from os.path import join, isfile
 from models.models_generic import get_backbone, get_model
 from tools.local_matcher import calc_keypoint_centers_from_patches
+from models.PatchMatch import PatchMatch
+
+
+def apply_patch_weights(input_scores, num_patches, patch_weights):
+    """
+    给Patch添加权重
+
+    :param input_scores:
+    :param num_patches: Patch的数量
+    :param patch_weights: Patch的权重
+    :return:
+    """
+    output_score = 0
+
+    if len(patch_weights) != num_patches:
+        raise ValueError('Patch的权重数必须与Patch的数量相同')
+    for i in range(num_patches):
+        output_score = output_score + (patch_weights[i] * input_scores[i])
+
+    return output_score
 
 
 def match_image(model, device, config, image_1, image_2, result_save_path):
@@ -77,6 +97,13 @@ def match_image(model, device, config, image_1, image_2, result_save_path):
             keypoints, indices = calc_keypoint_centers_from_patches(config, patch_size, patch_size, stride, stride)
             all_keypoints.append(keypoints)
             all_indices.append(indices)
+
+        matcher = PatchMatch(config['feature_match']['matcher'], patch_sizes, strides, all_keypoints, all_indices)
+
+        scores, inlier_keypoints_1, inlier_keypoints_2 = matcher.match(image_1_local_feature, image_2_local_feature)
+        score = -1 * apply_patch_weights(scores, len(patch_sizes), patch_weights)
+
+        print('两幅图像的相似度分数为: {.5f}。分数越高，则相似度越高。'.format(score))
 
     print('xxx')
 
